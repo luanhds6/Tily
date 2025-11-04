@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ArrowLeft, Send, Paperclip, Clock, User, Calendar, Tag } from "lucide-react";
+import { ArrowLeft, Send, Paperclip, Clock, User, Calendar, Tag, CheckCircle, Wrench } from "lucide-react";
 
 interface TicketDetailViewProps {
   ticket: Ticket;
@@ -49,7 +49,7 @@ export function TicketDetailView({
       case "Aberto": return "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20";
       case "Em Progresso": return "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20";
       case "Aguardando": return "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20";
-      case "Resolvido": return "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20";
+      case "Resolvido": return "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20";
       case "Fechado": return "bg-muted text-muted-foreground border-border";
       default: return "bg-muted text-muted-foreground border-border";
     }
@@ -60,6 +60,10 @@ export function TicketDetailView({
     if (!replyText.trim() && attachments.length === 0) return;
 
     onAddMessage(ticket.id, session.id, session.name, replyText, attachments);
+    // Se um agente/admin respondeu ao ticket de um usuário, muda status para "Aguardando"
+    if (isAdmin && session.id !== ticket.authorId) {
+      onUpdateStatus(ticket.id, { status: "Aguardando" });
+    }
     setReplyText("");
     setAttachments([]);
   };
@@ -162,23 +166,30 @@ export function TicketDetailView({
 
           {isAdmin && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border">
-              <div>
-                <label className="text-sm font-medium mb-2 block">Status</label>
-                <Select
-                  value={ticket.status}
-                  onValueChange={(status) => onUpdateStatus(ticket.id, { status: status as any })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Aberto">Aberto</SelectItem>
-                    <SelectItem value="Em Progresso">Em Progresso</SelectItem>
-                    <SelectItem value="Aguardando">Aguardando</SelectItem>
-                    <SelectItem value="Resolvido">Resolvido</SelectItem>
-                    <SelectItem value="Fechado">Fechado</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="space-y-2">
+                <label className="text-sm font-medium mb-2 block">Ações rápidas</label>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    className="bg-green-600 text-white hover:bg-green-700"
+                    onClick={() => {
+                      onUpdateStatus(ticket.id, { status: "Resolvido", resolvedAt: new Date().toISOString() });
+                      onBack();
+                    }}
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Marcar como resolvido
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                    onClick={() => onUpdateStatus(ticket.id, { status: "Em Progresso" })}
+                  >
+                    <Wrench className="h-4 w-4 mr-2" />
+                    Ir para atendimento
+                  </Button>
+                </div>
               </div>
               <div>
                 <label className="text-sm font-medium mb-2 block">Atribuir para</label>

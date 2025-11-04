@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Home, FileText, Ticket, Plus, Users, BarChart3, BookOpen, Settings, LogOut, Menu, X, UserCircle } from "lucide-react";
+import { Home, FileText, Ticket, Plus, Users, BarChart3, BookOpen, Settings, LogOut, Menu, X, UserCircle, MessageSquare, AlertCircle } from "lucide-react";
 import { Session } from "../../hooks/useAuth";
 
 interface SidebarProps {
@@ -19,6 +19,8 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
     { id: "meus", label: "Meus Chamados", icon: FileText, show: true },
     { id: "todos", label: "Todos Chamados", icon: Ticket, show: isAdmin },
     { id: "new", label: "Novo Chamado", icon: Plus, show: true },
+    { id: "chat", label: "Chat", icon: MessageSquare, show: true },
+    { id: "informativos", label: "Informativos", icon: AlertCircle, show: true },
     { id: "analytics", label: "Relatórios", icon: BarChart3, show: isAdmin },
     { id: "knowledge", label: "Base de Conhecimento", icon: BookOpen, show: true },
     { id: "users", label: "Usuários", icon: Users, show: isMaster },
@@ -76,7 +78,7 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
         </ul>
       </nav>
 
-      <div className="p-4 border-t border-sidebar-border">
+      <div className="p-4 border-t border-sidebar-border sticky bottom-0 bg-sidebar z-10">
         <button
           onClick={onLogout}
           className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"

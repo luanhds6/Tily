@@ -46,9 +46,20 @@ export function TicketListView({ tickets, onTicketClick, title }: TicketListView
       case "Aberto": return "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20";
       case "Em Progresso": return "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20";
       case "Aguardando": return "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20";
-      case "Resolvido": return "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20";
+      case "Resolvido": return "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20";
       case "Fechado": return "bg-muted text-muted-foreground border-border";
       default: return "bg-muted text-muted-foreground border-border";
+    }
+  };
+
+  const getCardHighlight = (status: string) => {
+    switch (status) {
+      case "Aguardando":
+        return "border-yellow-300 bg-yellow-50 dark:border-yellow-700 dark:bg-yellow-900/20";
+      case "Resolvido":
+        return "border-green-300 bg-green-50 dark:border-green-700 dark:bg-green-900/20";
+      default:
+        return "";
     }
   };
 
@@ -127,7 +138,7 @@ export function TicketListView({ tickets, onTicketClick, title }: TicketListView
             return (
               <Card
                 key={ticket.id}
-                className="p-4 cursor-pointer hover:shadow-lg transition-all hover:border-primary/50"
+                className={`p-4 cursor-pointer hover:shadow-lg transition-all hover:border-primary/50 ${getCardHighlight(ticket.status)}`}
                 onClick={() => onTicketClick(ticket.id)}
               >
                 <div className="flex flex-col md:flex-row md:items-center gap-4">

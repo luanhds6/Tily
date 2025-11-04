@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useTickets } from "../hooks/useTickets";
 import { Sidebar } from "./layout/Sidebar";
@@ -12,12 +12,20 @@ import { TicketDetailView } from "./tickets/TicketDetailView";
 import { NewTicketForm } from "./tickets/NewTicketForm";
 import { UsersManagementView } from "./users/UsersManagementView";
 import { Ticket, User, Mail } from "lucide-react";
+import { ChatView } from "./chat/ChatView";
+import { ChatFloating } from "./chat/ChatFloating";
+import { useRealtimeMessages } from "../hooks/useSupabaseRealtime";
+import { requestNotificationPermission, notify } from "../hooks/useNotifications";
+import { InformativosView } from "./informativos/InformativosView";
+import { NotificationCenterProvider, useNotificationCenter } from "@/hooks/useNotificationCenter";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
-export default function SistemaChamadosTI() {
+function AppWithNotifications() {
   const { users, session, login, logout, getAdminUsers, isAdmin, isMaster, createUser, updateUser, deleteUser } = useAuth();
   const { tickets, createTicket, updateTicket, addMessage, assignTicket, resolveTicket, deleteTicket } = useTickets();
   const [view, setView] = useState("dashboard");
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  const { addNotification } = useNotificationCenter();
   
   // Login form states
   const [email, setEmail] = useState("");
@@ -39,6 +47,28 @@ export default function SistemaChamadosTI() {
     createTicket(session.id, session.name, data);
     setView("meus");
   };
+
+  // Solicita permissão de notificação quando o usuário está logado
+  useEffect(() => {
+    if (session) {
+      requestNotificationPermission();
+    }
+  }, [session]);
+
+  // Assina novas mensagens e envia notificação se for resposta ao usuário
+  useRealtimeMessages((row) => {
+    if (!session) return;
+    const ticket = tickets.find((t) => t.id === row.ticket_id);
+    if (!ticket) return;
+    const isForCurrentUser = ticket.authorId === session.id;
+    const isFromOther = row.author_id !== session.id;
+    if (isForCurrentUser && isFromOther) {
+      const title = `Resposta no chamado: ${ticket.title}`;
+      const body = `${row.author_name} respondeu: ${(row.text || "").slice(0, 120)}`;
+      notify(title, { body });
+      addNotification({ title, body, category: "ticket" });
+    }
+  });
 
   const handleCreateUser = (data: { name: string; email: string; password: string; role: "user" | "admin" }) => {
     createUser({ ...data, active: true });
@@ -88,9 +118,13 @@ export default function SistemaChamadosTI() {
     <div className="flex min-h-screen bg-background">
       <Sidebar session={session} view={view} onViewChange={handleViewChange} onLogout={logout} />
       <main className="flex-1 lg:pt-0 pt-16">
+        {/* Sino de notificações global */}
+        <NotificationBell />
         {view === "dashboard" && <DashboardView tickets={tickets} session={session} agents={agents} onViewChange={handleViewChange} />}
+        {view === "chat" && <ChatView session={session} users={users} />}
         {view === "meus" && <TicketListView tickets={myTickets} onTicketClick={handleTicketClick} title="Meus Chamados" />}
         {view === "todos" && <TicketListView tickets={tickets} onTicketClick={handleTicketClick} title="Todos os Chamados" />}
+        {view === "informativos" && <InformativosView session={session} />}
         {view === "detail" && selectedTicket && session && (
           <TicketDetailView
             ticket={selectedTicket}
@@ -117,6 +151,16 @@ export default function SistemaChamadosTI() {
         {view === "profile" && <ProfileView session={session} tickets={tickets} />}
         {view === "settings" && <SettingsView />}
       </main>
+      {/* Chat flutuante disponível globalmente */}
+      <ChatFloating session={session} users={users} />
     </div>
+  );
+}
+
+export default function SistemaChamadosTI() {
+  return (
+    <NotificationCenterProvider>
+      <AppWithNotifications />
+    </NotificationCenterProvider>
   );
 }

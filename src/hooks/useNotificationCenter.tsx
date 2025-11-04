@@ -1,0 +1,79 @@
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+
+export type NotificationCategory = "chat" | "ticket" | "informativo";
+
+export type NotificationItem = {
+  id: string;
+  title: string;
+  body?: string;
+  category: NotificationCategory;
+  createdAt: string;
+  read: boolean;
+};
+
+type Ctx = {
+  notifications: NotificationItem[];
+  unreadCount: number;
+  addNotification: (n: Omit<NotificationItem, "id" | "createdAt" | "read"> & { id?: string }) => void;
+  markAllRead: () => void;
+  markRead: (id: string) => void;
+  clear: () => void;
+};
+
+const LS_KEY = "sc_notifications_v1";
+
+function loadJSON<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveJSON(key: string, data: any) {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch {}
+}
+
+function uid(prefix = "n") {
+  return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+const NotificationCenterContext = createContext<Ctx | null>(null);
+
+export function NotificationCenterProvider({ children }: { children: React.ReactNode }) {
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() => loadJSON(LS_KEY, []));
+
+  useEffect(() => {
+    saveJSON(LS_KEY, notifications);
+  }, [notifications]);
+
+  const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
+
+  const addNotification: Ctx["addNotification"] = (n) => {
+    const item: NotificationItem = {
+      id: n.id || uid(),
+      title: n.title,
+      body: n.body,
+      category: n.category,
+      createdAt: new Date().toISOString(),
+      read: false,
+    };
+    setNotifications((prev) => [item, ...prev].slice(0, 200));
+  };
+
+  const markAllRead = () => setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  const markRead = (id: string) => setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  const clear = () => setNotifications([]);
+
+  const value: Ctx = { notifications, unreadCount, addNotification, markAllRead, markRead, clear };
+  return <NotificationCenterContext.Provider value={value}>{children}</NotificationCenterContext.Provider>;
+}
+
+export function useNotificationCenter() {
+  const ctx = useContext(NotificationCenterContext);
+  if (!ctx) throw new Error("useNotificationCenter must be used within NotificationCenterProvider");
+  return ctx;
+}
