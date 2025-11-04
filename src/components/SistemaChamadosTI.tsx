@@ -7,11 +7,15 @@ import { AnalyticsView } from "./analytics/AnalyticsView";
 import { KnowledgeBaseView } from "./knowledge-base/KnowledgeBaseView";
 import { ProfileView } from "./profile/ProfileView";
 import { SettingsView } from "./settings/SettingsView";
+import { TicketListView } from "./tickets/TicketListView";
+import { TicketDetailView } from "./tickets/TicketDetailView";
+import { NewTicketForm } from "./tickets/NewTicketForm";
+import { UsersManagementView } from "./users/UsersManagementView";
 import { Ticket, User, Mail } from "lucide-react";
 
 export default function SistemaChamadosTI() {
-  const { users, session, login, logout, getAdminUsers, isAdmin } = useAuth();
-  const { tickets } = useTickets();
+  const { users, session, login, logout, getAdminUsers, isAdmin, isMaster, createUser, updateUser, deleteUser } = useAuth();
+  const { tickets, createTicket, updateTicket, addMessage, assignTicket, resolveTicket, deleteTicket } = useTickets();
   const [view, setView] = useState("dashboard");
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   
@@ -23,6 +27,21 @@ export default function SistemaChamadosTI() {
   const handleViewChange = (newView: string, ticketId?: string) => {
     setView(newView);
     if (ticketId) setSelectedTicketId(ticketId);
+  };
+
+  const handleTicketClick = (ticketId: string) => {
+    setSelectedTicketId(ticketId);
+    setView("detail");
+  };
+
+  const handleNewTicket = (data: any) => {
+    if (!session) return;
+    createTicket(session.id, session.name, data);
+    setView("meus");
+  };
+
+  const handleCreateUser = (data: { name: string; email: string; password: string; role: "user" | "admin" }) => {
+    createUser({ ...data, active: true });
   };
 
   // Login Form
@@ -62,12 +81,37 @@ export default function SistemaChamadosTI() {
   }
 
   const agents = getAdminUsers();
+  const myTickets = tickets.filter(t => t.authorId === session?.id);
+  const selectedTicket = selectedTicketId ? tickets.find(t => t.id === selectedTicketId) : null;
 
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar session={session} view={view} onViewChange={handleViewChange} onLogout={logout} />
       <main className="flex-1 lg:pt-0 pt-16">
         {view === "dashboard" && <DashboardView tickets={tickets} session={session} agents={agents} onViewChange={handleViewChange} />}
+        {view === "meus" && <TicketListView tickets={myTickets} onTicketClick={handleTicketClick} title="Meus Chamados" />}
+        {view === "todos" && <TicketListView tickets={tickets} onTicketClick={handleTicketClick} title="Todos os Chamados" />}
+        {view === "detail" && selectedTicket && session && (
+          <TicketDetailView
+            ticket={selectedTicket}
+            session={session}
+            agents={agents}
+            onBack={() => setView(session.role === "user" ? "meus" : "todos")}
+            onAddMessage={addMessage}
+            onUpdateStatus={updateTicket}
+            onAssignTicket={assignTicket}
+          />
+        )}
+        {view === "new" && <NewTicketForm onSubmit={handleNewTicket} onCancel={() => setView("meus")} />}
+        {view === "users" && session && isMaster && (
+          <UsersManagementView
+            users={users}
+            currentUser={users.find(u => u.id === session.id)!}
+            onCreateUser={handleCreateUser}
+            onUpdateUser={updateUser}
+            onDeleteUser={deleteUser}
+          />
+        )}
         {view === "analytics" && <AnalyticsView tickets={tickets} agents={agents} />}
         {view === "knowledge" && <KnowledgeBaseView isAdmin={isAdmin} />}
         {view === "profile" && <ProfileView session={session} tickets={tickets} />}
