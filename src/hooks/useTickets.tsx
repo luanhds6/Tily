@@ -81,7 +81,9 @@ export function useTickets() {
           authorId: userId,
           authorName: userName,
           text: data.description || "",
-          attachments: data.messages?.[0]?.attachments || [],
+          // Usa anexos enviados pelo formulário de novo chamado
+          // (data.attachments) como anexos da mensagem inicial
+          attachments: (data as any)?.attachments || data.messages?.[0]?.attachments || [],
           createdAt: new Date().toISOString(),
         },
       ],
