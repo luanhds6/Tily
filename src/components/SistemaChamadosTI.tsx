@@ -14,6 +14,11 @@ export default function SistemaChamadosTI() {
   const { tickets } = useTickets();
   const [view, setView] = useState("dashboard");
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  
+  // Login form states
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [err, setErr] = useState("");
 
   const handleViewChange = (newView: string, ticketId?: string) => {
     setView(newView);
@@ -22,10 +27,6 @@ export default function SistemaChamadosTI() {
 
   // Login Form
   if (!session) {
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
-    const [err, setErr] = useState("");
-
     return (
       <div className="min-h-screen flex items-center justify-center bg-background lg:pt-0 pt-16">
         <div className="max-w-md w-full mx-4">
