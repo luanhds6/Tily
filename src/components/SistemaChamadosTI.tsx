@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth, Session as LegacySession } from "../hooks/useAuth";
+import { useSupabaseAuth } from "../hooks/useSupabaseAuth";
+import { Navigate } from "react-router-dom";
 import { useTickets } from "../hooks/useTickets";
 import { Sidebar } from "./layout/Sidebar";
 import { DashboardView } from "./dashboard/DashboardView";
@@ -13,6 +15,7 @@ import { TicketDetailView } from "./tickets/TicketDetailView";
 import { NewTicketForm } from "./tickets/NewTicketForm";
 import { TicketsPage } from "./tickets/TicketsPage";
 import { UsersManagementView } from "./users/UsersManagementView";
+import ProfilesManagementView from "./users/ProfilesManagementView";
 import { Ticket, User, Mail } from "lucide-react";
 import { ChatView } from "./chat/ChatView";
 import { ChatFloating } from "./chat/ChatFloating";
@@ -24,16 +27,25 @@ import { NotificationBell } from "@/components/notifications/NotificationBell";
 import QuickLinksView from "./quick-links/QuickLinksView";
 
 function AppWithNotifications() {
-  const { users, session, login, logout, getAdminUsers, isAdmin, isMaster, createUser, updateUser, deleteUser } = useAuth();
+  // Supabase auth (fonte de verdade para sessão)
+  const { user, profile, loading, isAdmin, isMaster, signOut } = useSupabaseAuth();
+
+  // Hooks locais existentes (usuários, tickets, etc.)
+  const { users, getAdminUsers, createUser, updateUser, deleteUser } = useAuth();
   const { tickets, createTicket, updateTicket, addMessage, assignTicket, resolveTicket, deleteTicket } = useTickets();
   const [view, setView] = useState("dashboard");
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const { addNotification } = useNotificationCenter();
   
-  // Login form states
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [err, setErr] = useState("");
+  // Converte sessão Supabase para sessão legada esperada pelos componentes
+  const session: LegacySession | null = user
+    ? {
+        id: user.id,
+        name: profile?.full_name ?? user.email ?? "Usuário",
+        email: user.email ?? "",
+        role: profile?.is_master ? "master" : profile?.role === "admin" ? "admin" : "user",
+      }
+    : null;
 
   const handleViewChange = (newView: string, ticketId?: string) => {
     setView(newView);
@@ -77,38 +89,14 @@ function AppWithNotifications() {
     createUser({ ...data, active: true });
   };
 
-  // Login Form
-  if (!session) {
+  // Proteção de rota: redireciona para /login quando não autenticado (Supabase)
+  if (!loading && !session) {
+    return <Navigate to="/login" replace />;
+  }
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background lg:pt-0 pt-16">
-        <div className="max-w-md w-full mx-4">
-          <div className="bg-card rounded-lg shadow-medium p-8 border border-border">
-            <div className="text-center mb-6">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-full mb-4">
-                <Ticket className="w-8 h-8 text-primary" />
-              </div>
-              <h2 className="text-2xl font-bold text-foreground">Sistema de Chamados TI</h2>
-              <p className="text-sm text-muted-foreground mt-1">Faça login para continuar</p>
-            </div>
-            {err && (
-              <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded mb-4 text-sm">
-                {err}
-              </div>
-            )}
-            <form onSubmit={(e) => { e.preventDefault(); if (!login(email.trim(), password)) setErr("Credenciais inválidas"); }} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Email</label>
-                <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="seu@email.com" className="w-full border border-input bg-background px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Senha</label>
-                <input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="w-full border border-input bg-background px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" />
-              </div>
-              <button type="submit" className="w-full bg-primary text-primary-foreground px-4 py-2.5 rounded-lg font-medium hover:bg-primary/90 transition-colors">Entrar</button>
-              <button type="button" onClick={() => { setEmail("master@local"); setPassword("master123"); }} className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors">Demo: master@local / master123</button>
-            </form>
-          </div>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-muted-foreground">Carregando...</div>
       </div>
     );
   }
@@ -119,7 +107,7 @@ function AppWithNotifications() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar session={session} view={view} onViewChange={handleViewChange} onLogout={logout} />
+      <Sidebar session={session!} view={view} onViewChange={handleViewChange} onLogout={() => { signOut(); }} />
       <main className="flex-1 lg:pt-0 pt-16 md:pr-20">
         {/* Sino de notificações global */}
         <NotificationBell />
@@ -151,13 +139,7 @@ function AppWithNotifications() {
         )}
         {view === "new" && <NewTicketForm onSubmit={handleNewTicket} onCancel={() => setView("chamados")} />}
         {view === "users" && session && isMaster && (
-          <UsersManagementView
-            users={users}
-            currentUser={users.find(u => u.id === session.id)!}
-            onCreateUser={handleCreateUser}
-            onUpdateUser={updateUser}
-            onDeleteUser={deleteUser}
-          />
+          <ProfilesManagementView />
         )}
         {view === "analytics" && <AnalyticsView tickets={tickets} agents={agents} />}
         {view === "knowledge" && <KnowledgeBaseView isAdmin={isAdmin} />}
