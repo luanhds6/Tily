@@ -1,38 +1,48 @@
 import React, { useState } from "react";
 import { Ticket, Message } from "@/hooks/useTickets";
-import { Session } from "@/hooks/useAuth";
+import { Session, User } from "@/hooks/useAuth";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ArrowLeft, Send, Paperclip, Clock, User, Calendar, Tag, CheckCircle, Wrench } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ArrowLeft, Send, Paperclip, Clock, User as UserIcon, Calendar, Tag, CheckCircle, Wrench } from "lucide-react";
 
 interface TicketDetailViewProps {
   ticket: Ticket;
   session: Session;
+  users: User[];
   agents: Array<{ id: string; name: string }>;
   onBack: () => void;
   onAddMessage: (ticketId: string, userId: string, userName: string, text: string, attachments: any[]) => void;
   onUpdateStatus: (ticketId: string, updates: Partial<Ticket>) => void;
   onAssignTicket: (ticketId: string, agentId: string, agentName: string) => void;
+  onDeleteTicket: (ticketId: string) => void;
 }
 
 export function TicketDetailView({
   ticket,
   session,
+  users,
   agents,
   onBack,
   onAddMessage,
   onUpdateStatus,
   onAssignTicket,
+  onDeleteTicket,
 }: TicketDetailViewProps) {
   const [replyText, setReplyText] = useState("");
   const [attachments, setAttachments] = useState<any[]>([]);
 
   const isAdmin = session.role === "admin" || session.role === "master";
   const canEdit = isAdmin || session.id === ticket.authorId;
+  const isOwner = session.id === ticket.authorId;
+  const isResolved = ticket.status === "Resolvido";
+  const wasResolved = !!ticket.resolvedAt; // uma vez resolvido, não pode mais excluir
+  const canDelete = !wasResolved && (isAdmin || isOwner);
+  const canReopen = isResolved && (isAdmin || isOwner);
+  const author = users.find((u) => u.id === ticket.authorId);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -132,13 +142,22 @@ export function TicketDetailView({
               </Badge>
             </div>
           </div>
-
+          
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4 border-t border-border">
             <div className="flex items-center gap-2 text-sm">
-              <User className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <p className="text-xs text-muted-foreground">Autor</p>
-                <p className="font-medium">{ticket.authorName}</p>
+              <UserIcon className="h-4 w-4 text-muted-foreground" />
+              <div className="flex items-center gap-2">
+                <Avatar className="w-6 h-6">
+                  {author?.avatar ? (
+                    <AvatarImage src={author.avatar} alt={ticket.authorName} />
+                  ) : (
+                    <AvatarFallback>{(ticket.authorName || "?").slice(0, 2).toUpperCase()}</AvatarFallback>
+                  )}
+                </Avatar>
+                <div>
+                  <p className="text-xs text-muted-foreground">Autor</p>
+                  <p className="font-medium">{ticket.authorName}</p>
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2 text-sm">
@@ -162,6 +181,29 @@ export function TicketDetailView({
                 <p className="font-medium">{ticket.category}</p>
               </div>
             </div>
+          </div>
+
+          {/* Ações de usuário/admin: Excluir e Reabrir */}
+          <div className="flex justify-end gap-2 pt-4 border-t border-border">
+            {canReopen && (
+              <Button
+                type="button"
+                variant="outline"
+                className="border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                onClick={() => onUpdateStatus(ticket.id, { status: "Aberto" })}
+              >
+                Reabrir chamado
+              </Button>
+            )}
+            {canDelete && (
+              <Button
+                type="button"
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => onDeleteTicket(ticket.id)}
+              >
+                Excluir chamado
+              </Button>
+            )}
           </div>
 
           {isAdmin && (

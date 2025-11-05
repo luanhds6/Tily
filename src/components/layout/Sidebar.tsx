@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Home, FileText, Ticket, Plus, Users, BarChart3, BookOpen, Settings, LogOut, Menu, X, UserCircle, MessageSquare, AlertCircle } from "lucide-react";
+import { Home, Ticket, Users, BarChart3, BookOpen, Settings, LogOut, Menu, X, UserCircle, MessageSquare, AlertCircle } from "lucide-react";
 import { Session } from "../../hooks/useAuth";
 
 interface SidebarProps {
@@ -16,9 +16,7 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
 
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: Home, show: true },
-    { id: "meus", label: "Meus Chamados", icon: FileText, show: true },
-    { id: "todos", label: "Todos Chamados", icon: Ticket, show: isAdmin },
-    { id: "new", label: "Novo Chamado", icon: Plus, show: true },
+    { id: "chamados", label: "Chamados", icon: Ticket, show: true },
     { id: "chat", label: "Chat", icon: MessageSquare, show: true },
     { id: "informativos", label: "Informativos", icon: AlertCircle, show: true },
     { id: "analytics", label: "Relatórios", icon: BarChart3, show: isAdmin },

@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Send, MessageSquare } from "lucide-react";
 import { requestNotificationPermission, notify } from "@/hooks/useNotifications";
 
@@ -86,7 +86,11 @@ export function ChatView({ session, users }: ChatViewProps) {
                   <div className="flex items-center gap-2 mb-1">
                     {!mine && (
                       <Avatar className="w-6 h-6">
-                        <AvatarFallback>{getInitials(m.senderName)}</AvatarFallback>
+                        {users.find((u) => u.id === m.senderId)?.avatar ? (
+                          <AvatarImage src={users.find((u) => u.id === m.senderId)!.avatar!} alt={m.senderName} />
+                        ) : (
+                          <AvatarFallback>{getInitials(m.senderName)}</AvatarFallback>
+                        )}
                       </Avatar>
                     )}
                     <span className="font-medium">{mine ? "Você" : m.senderName}</span>

@@ -10,6 +10,7 @@ import { SettingsView } from "./settings/SettingsView";
 import { TicketListView } from "./tickets/TicketListView";
 import { TicketDetailView } from "./tickets/TicketDetailView";
 import { NewTicketForm } from "./tickets/NewTicketForm";
+import { TicketsPage } from "./tickets/TicketsPage";
 import { UsersManagementView } from "./users/UsersManagementView";
 import { Ticket, User, Mail } from "lucide-react";
 import { ChatView } from "./chat/ChatView";
@@ -45,7 +46,7 @@ function AppWithNotifications() {
   const handleNewTicket = (data: any) => {
     if (!session) return;
     createTicket(session.id, session.name, data);
-    setView("meus");
+    setView("chamados");
   };
 
   // Solicita permissão de notificação quando o usuário está logado
@@ -122,21 +123,30 @@ function AppWithNotifications() {
         <NotificationBell />
         {view === "dashboard" && <DashboardView tickets={tickets} session={session} agents={agents} onViewChange={handleViewChange} />}
         {view === "chat" && <ChatView session={session} users={users} />}
-        {view === "meus" && <TicketListView tickets={myTickets} onTicketClick={handleTicketClick} title="Meus Chamados" />}
-        {view === "todos" && <TicketListView tickets={tickets} onTicketClick={handleTicketClick} title="Todos os Chamados" />}
+        {view === "chamados" && (
+          <TicketsPage
+            session={session}
+            users={users}
+            tickets={tickets}
+            onTicketClick={handleTicketClick}
+            onCreateTicket={handleNewTicket}
+          />
+        )}
         {view === "informativos" && <InformativosView session={session} />}
         {view === "detail" && selectedTicket && session && (
           <TicketDetailView
             ticket={selectedTicket}
             session={session}
+            users={users}
             agents={agents}
-            onBack={() => setView(session.role === "user" ? "meus" : "todos")}
+            onBack={() => setView("chamados")}
             onAddMessage={addMessage}
             onUpdateStatus={updateTicket}
             onAssignTicket={assignTicket}
+            onDeleteTicket={deleteTicket}
           />
         )}
-        {view === "new" && <NewTicketForm onSubmit={handleNewTicket} onCancel={() => setView("meus")} />}
+        {view === "new" && <NewTicketForm onSubmit={handleNewTicket} onCancel={() => setView("chamados")} />}
         {view === "users" && session && isMaster && (
           <UsersManagementView
             users={users}

@@ -4,7 +4,7 @@ import { useChat } from "@/hooks/useChat";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { MessageSquare, Send, Paperclip, X, ImagePlus } from "lucide-react";
 import { requestNotificationPermission, notify } from "@/hooks/useNotifications";
 import { useNotificationCenter } from "@/hooks/useNotificationCenter";
@@ -157,7 +157,11 @@ export function ChatFloating({ session, users }: ChatFloatingProps) {
                   >
                     <div className="flex items-center gap-2">
                       <Avatar className="w-6 h-6">
-                        <AvatarFallback>{getInitials(u.name)}</AvatarFallback>
+                        {u.avatar ? (
+                          <AvatarImage src={u.avatar} alt={u.name} />
+                        ) : (
+                          <AvatarFallback>{getInitials(u.name)}</AvatarFallback>
+                        )}
                       </Avatar>
                       <div className="flex-1">
                         <div className="text-sm font-medium line-clamp-1">{u.name}</div>
@@ -187,7 +191,11 @@ export function ChatFloating({ session, users }: ChatFloatingProps) {
                         <div className="flex items-center gap-2 mb-1">
                           {!mine && m.senderId !== "system" && (
                             <Avatar className="w-6 h-6">
-                              <AvatarFallback>{getInitials(m.senderName)}</AvatarFallback>
+                              {users.find((u) => u.id === m.senderId)?.avatar ? (
+                                <AvatarImage src={users.find((u) => u.id === m.senderId)!.avatar!} alt={m.senderName} />
+                              ) : (
+                                <AvatarFallback>{getInitials(m.senderName)}</AvatarFallback>
+                              )}
                             </Avatar>
                           )}
                           <span className="font-medium">{m.senderId === "system" ? "Sistema" : mine ? "Você" : m.senderName}</span>

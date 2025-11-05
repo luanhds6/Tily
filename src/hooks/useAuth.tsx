@@ -138,6 +138,12 @@ export function useAuth() {
     }
   };
 
+  // Permite qualquer usuário logado atualizar o próprio avatar
+  const setMyAvatar = (avatarDataUrl: string) => {
+    if (!session) return;
+    setUsers((prev) => prev.map((u) => (u.id === session.id ? { ...u, avatar: avatarDataUrl } : u)));
+  };
+
   const getAdminUsers = () => {
     return users.filter((u) => (u.role === "admin" || u.role === "master") && u.active);
   };
@@ -153,5 +159,6 @@ export function useAuth() {
     getAdminUsers,
     isAdmin: session?.role === "admin" || session?.role === "master",
     isMaster: session?.role === "master",
+    setMyAvatar,
   };
 }

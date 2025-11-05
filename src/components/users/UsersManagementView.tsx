@@ -238,78 +238,110 @@ export function UsersManagementView({
         />
       </Card>
 
-      {/* Users List */}
-      <Card>
-        <div className="divide-y divide-border">
-          {filteredUsers.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              Nenhum usuário encontrado
-            </div>
-          ) : (
-            filteredUsers.map((user) => (
-              <div key={user.id} className="p-4 hover:bg-muted/50 transition-colors">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 flex-1">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      {getRoleIcon(user.role)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-semibold truncate">{user.name}</p>
-                        {getRoleBadge(user.role)}
-                        {!user.active && (
-                          <Badge variant="destructive" className="text-xs">
-                            Inativo
-                          </Badge>
-                        )}
-                        {user.id === currentUser.id && (
-                          <Badge variant="outline" className="text-xs">
-                            Você
-                          </Badge>
-                        )}
+      {/* Users List in two columns: Admins (left), Users (right) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <div className="p-4 border-b border-border">
+            <h3 className="font-semibold">Administradores</h3>
+          </div>
+          <div className="divide-y divide-border">
+            {filteredUsers.filter((u) => u.role === "admin" || u.role === "master").length === 0 ? (
+              <div className="p-6 text-center text-muted-foreground">Nenhum administrador encontrado</div>
+            ) : (
+              filteredUsers
+                .filter((u) => u.role === "admin" || u.role === "master")
+                .map((user) => (
+                  <div key={user.id} className="p-4 hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          {getRoleIcon(user.role)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold truncate">{user.name}</p>
+                            {getRoleBadge(user.role)}
+                            {!user.active && (
+                              <Badge variant="destructive" className="text-xs">Inativo</Badge>
+                            )}
+                            {user.id === currentUser.id && (
+                              <Badge variant="outline" className="text-xs">Você</Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+                        </div>
                       </div>
-                      <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+                      {user.role !== "master" && user.id !== currentUser.id && (
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" size="sm" onClick={() => handleToggleActive(user)} title={user.active ? "Desativar" : "Ativar"}>
+                            {user.active ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => handleChangeRole(user)} title={user.role === "admin" ? "Tornar usuário" : "Tornar admin"}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button variant="destructive" size="sm" onClick={() => handleDeleteUser(user)} title="Excluir usuário">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </div>
+                ))
+            )}
+          </div>
+        </Card>
 
-                  {user.role !== "master" && user.id !== currentUser.id && (
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleToggleActive(user)}
-                        title={user.active ? "Desativar" : "Ativar"}
-                      >
-                        {user.active ? (
-                          <Ban className="h-4 w-4" />
-                        ) : (
-                          <CheckCircle className="h-4 w-4" />
-                        )}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleChangeRole(user)}
-                        title={user.role === "admin" ? "Tornar usuário" : "Tornar admin"}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleDeleteUser(user)}
-                        title="Excluir usuário"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+        <Card>
+          <div className="p-4 border-b border-border">
+            <h3 className="font-semibold">Usuários</h3>
+          </div>
+          <div className="divide-y divide-border">
+            {filteredUsers.filter((u) => u.role === "user").length === 0 ? (
+              <div className="p-6 text-center text-muted-foreground">Nenhum usuário encontrado</div>
+            ) : (
+              filteredUsers
+                .filter((u) => u.role === "user")
+                .map((user) => (
+                  <div key={user.id} className="p-4 hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          {getRoleIcon(user.role)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold truncate">{user.name}</p>
+                            {getRoleBadge(user.role)}
+                            {!user.active && (
+                              <Badge variant="destructive" className="text-xs">Inativo</Badge>
+                            )}
+                            {user.id === currentUser.id && (
+                              <Badge variant="outline" className="text-xs">Você</Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+                        </div>
+                      </div>
+                      {user.id !== currentUser.id && (
+                        <div className="flex items-center gap-2">
+                          <Button variant="outline" size="sm" onClick={() => handleToggleActive(user)} title={user.active ? "Desativar" : "Ativar"}>
+                            {user.active ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => handleChangeRole(user)} title="Tornar admin">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button variant="destructive" size="sm" onClick={() => handleDeleteUser(user)} title="Excluir usuário">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </Card>
+                  </div>
+                ))
+            )}
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

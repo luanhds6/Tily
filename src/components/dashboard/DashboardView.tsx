@@ -102,28 +102,28 @@ export function DashboardView({ tickets, session, agents, onViewChange }: Dashbo
               label="Total de Chamados"
               value={tickets.length}
               variant="primary"
-              onClick={() => onViewChange("todos")}
+              onClick={() => onViewChange("chamados")}
             />
             <StatCard
               icon={Clock}
               label="Abertos"
               value={openTickets.length}
               variant="warning"
-              onClick={() => onViewChange("todos")}
+              onClick={() => onViewChange("chamados")}
             />
             <StatCard
               icon={CheckCircle}
               label="Resolvidos"
               value={resolvedTickets.length}
               variant="success"
-              onClick={() => onViewChange("todos")}
+              onClick={() => onViewChange("chamados")}
             />
             <StatCard
               icon={AlertTriangle}
               label="SLA em Risco"
               value={slaWarnings.length}
               variant="danger"
-              onClick={() => onViewChange("todos")}
+              onClick={() => onViewChange("chamados")}
             />
           </>
         ) : (
@@ -133,21 +133,21 @@ export function DashboardView({ tickets, session, agents, onViewChange }: Dashbo
               label="Meus Chamados"
               value={myTickets.length}
               variant="primary"
-              onClick={() => onViewChange("meus")}
+              onClick={() => onViewChange("chamados")}
             />
             <StatCard
               icon={Clock}
               label="Em Aberto"
               value={myTickets.filter((t) => t.status === "Aberto" || t.status === "Em Progresso").length}
               variant="warning"
-              onClick={() => onViewChange("meus")}
+              onClick={() => onViewChange("chamados")}
             />
             <StatCard
               icon={CheckCircle}
               label="Resolvidos"
               value={myTickets.filter((t) => t.status === "Resolvido").length}
               variant="success"
-              onClick={() => onViewChange("meus")}
+              onClick={() => onViewChange("chamados")}
             />
             <StatCard
               icon={TrendingUp}
@@ -157,7 +157,7 @@ export function DashboardView({ tickets, session, agents, onViewChange }: Dashbo
                 return diff < 30 * 24 * 60 * 60 * 1000;
               }).length}
               variant="default"
-              onClick={() => onViewChange("meus")}
+              onClick={() => onViewChange("chamados")}
             />
           </>
         )}
@@ -218,7 +218,7 @@ export function DashboardView({ tickets, session, agents, onViewChange }: Dashbo
               <Ticket className="w-12 h-12 mx-auto mb-3 opacity-20" />
               <p>Nenhum chamado encontrado</p>
               <button
-                onClick={() => onViewChange("new")}
+                onClick={() => onViewChange("chamados")}
                 className="mt-3 text-primary hover:underline text-sm"
               >
                 Criar primeiro chamado

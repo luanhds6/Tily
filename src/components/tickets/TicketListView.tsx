@@ -1,18 +1,21 @@
 import React, { useState } from "react";
 import { Ticket } from "@/hooks/useTickets";
+import { User as UserType } from "@/hooks/useAuth";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Clock, AlertCircle, User, Calendar, Search } from "lucide-react";
+import { Clock, AlertCircle, User as UserIcon, Calendar, Search } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface TicketListViewProps {
   tickets: Ticket[];
+  users: UserType[];
   onTicketClick: (ticketId: string) => void;
   title: string;
 }
 
-export function TicketListView({ tickets, onTicketClick, title }: TicketListViewProps) {
+export function TicketListView({ tickets, users, onTicketClick, title }: TicketListViewProps) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -157,8 +160,15 @@ export function TicketListView({ tickets, onTicketClick, title }: TicketListView
 
                     <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                       <div className="flex items-center gap-1">
-                        <User className="h-3 w-3" />
-                        {ticket.authorName}
+                        <UserIcon className="h-3 w-3" />
+                        <Avatar className="w-5 h-5">
+                          {users.find((u) => u.id === ticket.authorId)?.avatar ? (
+                            <AvatarImage src={users.find((u) => u.id === ticket.authorId)!.avatar!} alt={ticket.authorName} />
+                          ) : (
+                            <AvatarFallback>{(ticket.authorName || "?").slice(0, 2).toUpperCase()}</AvatarFallback>
+                          )}
+                        </Avatar>
+                        <span>{ticket.authorName}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />

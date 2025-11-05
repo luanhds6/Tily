@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { User, Mail, Shield, Calendar, Edit2, Save, X } from "lucide-react";
-import { Session } from "../../hooks/useAuth";
+import { User as UserIcon, Mail, Shield, Calendar, Edit2, Save, X, ImagePlus } from "lucide-react";
+import { Session, useAuth } from "../../hooks/useAuth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Ticket } from "../../hooks/useTickets";
 
 interface ProfileViewProps {
@@ -14,6 +15,9 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
     name: session.name,
     email: session.email,
   });
+  const { users, setMyAvatar } = useAuth();
+  const me = users.find((u) => u.id === session.id);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(me?.avatar || null);
 
   const myTickets = tickets.filter((t) => t.authorId === session.id);
   const myResolvedTickets = myTickets.filter((t) => t.status === "Resolvido" || t.status === "Fechado");
@@ -33,7 +37,7 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
       {/* Header */}
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold text-foreground flex items-center gap-2">
-          <User className="w-8 h-8 text-primary" />
+          <UserIcon className="w-8 h-8 text-primary" />
           Meu Perfil
         </h1>
         <p className="text-muted-foreground mt-1">Gerencie suas informações pessoais</p>
@@ -44,9 +48,13 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
         <div className="lg:col-span-2 bg-card border border-border rounded-lg p-6 shadow-soft">
           <div className="flex items-start justify-between mb-6">
             <div className="flex items-center gap-4">
-              <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center">
-                <User className="w-10 h-10 text-primary" />
-              </div>
+              <Avatar className="w-20 h-20">
+                {avatarPreview ? (
+                  <AvatarImage src={avatarPreview} alt={session.name} />
+                ) : (
+                  <AvatarFallback>{session.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0,2)}</AvatarFallback>
+                )}
+              </Avatar>
               <div>
                 <h2 className="text-xl font-bold text-foreground">{session.name}</h2>
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-1 ${
@@ -86,10 +94,42 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
                   className="w-full border border-input bg-background px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Foto de perfil</label>
+                <div className="flex items-center gap-3">
+                  <Avatar className="w-16 h-16">
+                    {avatarPreview ? (
+                      <AvatarImage src={avatarPreview} alt={session.name} />
+                    ) : (
+                      <AvatarFallback>{session.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0,2)}</AvatarFallback>
+                    )}
+                  </Avatar>
+                  <label className="inline-flex items-center gap-2 px-3 py-2 border border-input rounded-lg cursor-pointer hover:bg-muted/50">
+                    <ImagePlus className="w-4 h-4" />
+                    <span>Escolher imagem</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = () => setAvatarPreview(String(reader.result));
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                  </label>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">PNG/JPEG até ~1MB recomendado.</p>
+              </div>
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setEditing(false)}
+                  onClick={() => {
+                    if (avatarPreview) setMyAvatar(avatarPreview);
+                    setEditing(false);
+                  }}
                   className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
                 >
                   <Save className="w-4 h-4" />
