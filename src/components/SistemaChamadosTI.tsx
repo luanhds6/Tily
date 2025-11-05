@@ -7,6 +7,7 @@ import { AnalyticsView } from "./analytics/AnalyticsView";
 import { KnowledgeBaseView } from "./knowledge-base/KnowledgeBaseView";
 import { ProfileView } from "./profile/ProfileView";
 import { SettingsView } from "./settings/SettingsView";
+import AdminSettingsPage from "./settings/AdminSettingsPage";
 import { TicketListView } from "./tickets/TicketListView";
 import { TicketDetailView } from "./tickets/TicketDetailView";
 import { NewTicketForm } from "./tickets/NewTicketForm";
@@ -20,6 +21,7 @@ import { requestNotificationPermission, notify } from "../hooks/useNotifications
 import { InformativosView } from "./informativos/InformativosView";
 import { NotificationCenterProvider, useNotificationCenter } from "@/hooks/useNotificationCenter";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import QuickLinksView from "./quick-links/QuickLinksView";
 
 function AppWithNotifications() {
   const { users, session, login, logout, getAdminUsers, isAdmin, isMaster, createUser, updateUser, deleteUser } = useAuth();
@@ -118,7 +120,7 @@ function AppWithNotifications() {
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar session={session} view={view} onViewChange={handleViewChange} onLogout={logout} />
-      <main className="flex-1 lg:pt-0 pt-16">
+      <main className="flex-1 lg:pt-0 pt-16 md:pr-20">
         {/* Sino de notificações global */}
         <NotificationBell />
         {view === "dashboard" && <DashboardView tickets={tickets} session={session} agents={agents} onViewChange={handleViewChange} />}
@@ -133,6 +135,7 @@ function AppWithNotifications() {
           />
         )}
         {view === "informativos" && <InformativosView session={session} />}
+        {view === "links" && <QuickLinksView session={session} />}
         {view === "detail" && selectedTicket && session && (
           <TicketDetailView
             ticket={selectedTicket}
@@ -159,7 +162,20 @@ function AppWithNotifications() {
         {view === "analytics" && <AnalyticsView tickets={tickets} agents={agents} />}
         {view === "knowledge" && <KnowledgeBaseView isAdmin={isAdmin} />}
         {view === "profile" && <ProfileView session={session} tickets={tickets} />}
-        {view === "settings" && <SettingsView />}
+        {view === "settings" && (
+          isAdmin ? (
+            <AdminSettingsPage
+              session={session}
+              users={users}
+              tickets={tickets}
+              onCreateUser={handleCreateUser}
+              onUpdateUser={updateUser}
+              onDeleteUser={deleteUser}
+            />
+          ) : (
+            <SettingsView />
+          )
+        )}
       </main>
       {/* Chat flutuante disponível globalmente */}
       <ChatFloating session={session} users={users} />

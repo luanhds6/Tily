@@ -11,7 +11,7 @@ export function NotificationBell() {
   const recent = useMemo(() => notifications.slice(0, 15), [notifications]);
 
   return (
-    <div className="fixed top-4 right-4 z-50">
+    <div className="fixed z-50 sm:top-4 sm:right-4 bottom-4 right-4">
       <button
         className="relative rounded-full p-2 bg-background border border-border shadow-soft hover:bg-muted"
         onClick={() => setOpen((v) => !v)}
@@ -26,7 +26,7 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <Card className="mt-2 w-[340px] border border-border shadow-large bg-card">
+        <Card className="mt-2 w-[86vw] sm:w-[340px] border border-border shadow-large bg-card">
           <div className="flex items-center justify-between px-3 py-2 border-b border-border">
             <div className="flex items-center gap-2">
               <Bell className="w-4 h-4 text-primary" />
@@ -39,7 +39,7 @@ export function NotificationBell() {
               <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Fechar</Button>
             </div>
           </div>
-          <div className="max-h-[360px] overflow-y-auto p-2 space-y-2">
+          <div className="max-h-[50vh] sm:max-h-[360px] overflow-y-auto p-2 space-y-2">
             {recent.length === 0 && (
               <div className="text-sm text-muted-foreground px-2 py-4">Sem notificações</div>
             )}

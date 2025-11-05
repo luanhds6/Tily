@@ -124,7 +124,7 @@ export function ChatFloating({ session, users }: ChatFloatingProps) {
 
       {/* Painel flutuante */}
       {open && (
-        <Card className="fixed bottom-20 right-4 z-50 w-[780px] h-[520px] border border-border shadow-large bg-card flex flex-col">
+        <Card className="fixed bottom-24 right-4 z-50 w-[95vw] sm:w-[780px] h-[60vh] sm:h-[520px] border border-border shadow-large bg-card flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-2 border-b border-border">
             <div className="flex items-center gap-2">

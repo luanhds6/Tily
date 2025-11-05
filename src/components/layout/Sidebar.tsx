@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Home, Ticket, Users, BarChart3, BookOpen, Settings, LogOut, Menu, X, UserCircle, MessageSquare, AlertCircle } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Home, Ticket, Users, BarChart3, BookOpen, Settings, LogOut, Menu, X, UserCircle, MessageSquare, AlertCircle, Link as LinkIcon, Globe, FileText, Mail, Bookmark, ChevronUp, ChevronDown } from "lucide-react";
 import { Session } from "../../hooks/useAuth";
 
 interface SidebarProps {
@@ -14,20 +14,55 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
   const isAdmin = session && (session.role === "admin" || session.role === "master");
   const isMaster = session && session.role === "master";
 
+  type QuickLink = {
+    id: string;
+    title: string;
+    url: string;
+    icon: string;
+  };
+
+  const LS_QUICK_LINKS = "sc_quick_links_v1";
+  const ICONS_MAP = {
+    link: LinkIcon,
+    globe: Globe,
+    file: FileText,
+    user: UserCircle,
+    settings: Settings,
+    mail: Mail,
+    bookmark: Bookmark,
+  } as const;
+
+  const [linksOpen, setLinksOpen] = useState(false);
+  const [quickLinks, setQuickLinks] = useState<QuickLink[]>([]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LS_QUICK_LINKS);
+      setQuickLinks(raw ? (JSON.parse(raw) as QuickLink[]) : []);
+    } catch {
+      setQuickLinks([]);
+    }
+  }, []);
+
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: Home, show: true },
     { id: "chamados", label: "Chamados", icon: Ticket, show: true },
     { id: "chat", label: "Chat", icon: MessageSquare, show: true },
     { id: "informativos", label: "Informativos", icon: AlertCircle, show: true },
+    { id: "links", label: "Links Úteis", icon: LinkIcon, show: true },
     { id: "analytics", label: "Relatórios", icon: BarChart3, show: isAdmin },
     { id: "knowledge", label: "Base de Conhecimento", icon: BookOpen, show: true },
-    { id: "users", label: "Usuários", icon: Users, show: isMaster },
-    { id: "profile", label: "Perfil", icon: UserCircle, show: true },
+    { id: "users", label: "Usuários", icon: Users, show: false },
+    { id: "profile", label: "Perfil", icon: UserCircle, show: !isAdmin },
     { id: "settings", label: "Configurações", icon: Settings, show: isAdmin },
   ];
 
   const handleNavClick = (itemId: string) => {
-    onViewChange(itemId);
+    if (itemId === "links") {
+      setLinksOpen((o) => !o);
+    } else {
+      onViewChange(itemId);
+    }
     setMobileOpen(false);
   };
 
@@ -63,14 +98,57 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
               <button
                 onClick={() => handleNavClick(item.id)}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all ${
-                  view === item.id 
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-soft" 
+                  (view === item.id && item.id !== "links") || (item.id === "links" && linksOpen)
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-soft"
                     : "hover:bg-sidebar-accent/50 text-sidebar-foreground/80 hover:text-sidebar-foreground"
                 }`}
               >
                 <item.icon className="w-5 h-5 flex-shrink-0" />
                 <span className="font-medium truncate">{item.label}</span>
+                {item.id === "links" && (
+                  linksOpen ? (
+                    <ChevronDown className="w-4 h-4 ml-auto" />
+                  ) : (
+                    <ChevronUp className="w-4 h-4 ml-auto" />
+                  )
+                )}
               </button>
+              {item.id === "links" && linksOpen && (
+                <ul className="mt-1 ml-8 space-y-1">
+                  {quickLinks.length === 0 && (
+                    <li className="text-xs text-sidebar-foreground/60 px-4">Nenhum link cadastrado</li>
+                  )}
+                  {quickLinks.map((l) => {
+                    const IconComp = ICONS_MAP[(l.icon as keyof typeof ICONS_MAP) || "link"];
+                    return (
+                      <li key={l.id}>
+                        <a
+                          href={l.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full flex items-center gap-2 px-4 py-2 rounded-md transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                          title={l.title}
+                        >
+                          <IconComp className="w-4 h-4 flex-shrink-0" />
+                          <span className="truncate text-sm">{l.title}</span>
+                        </a>
+                      </li>
+                    );
+                  })}
+                  {isAdmin && (
+                    <li>
+                      <button
+                        onClick={() => onViewChange("links")}
+                        className="w-full flex items-center gap-2 px-4 py-2 rounded-md text-xs bg-sidebar-accent/30 hover:bg-sidebar-accent/50"
+                        title="Gerenciar links"
+                      >
+                        <Settings className="w-4 h-4" />
+                        <span>Gerenciar links</span>
+                      </button>
+                    </li>
+                  )}
+                </ul>
+              )}
             </li>
           ))}
         </ul>
