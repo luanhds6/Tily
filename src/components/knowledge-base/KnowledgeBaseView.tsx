@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { BookOpen, Search, Plus, Edit2, Trash2, Eye, ThumbsUp, MessageCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface Article {
   id: string;
@@ -87,13 +88,10 @@ export function KnowledgeBaseView({ isAdmin }: KnowledgeBaseViewProps) {
           <p className="text-muted-foreground mt-1">Artigos e soluções para problemas comuns</p>
         </div>
         {isAdmin && (
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-          >
+          <Button onClick={() => setShowForm(!showForm)} className="gap-2">
             <Plus className="w-5 h-5" />
             Novo Artigo
-          </button>
+          </Button>
         )}
       </div>
 
@@ -146,19 +144,10 @@ export function KnowledgeBaseView({ isAdmin }: KnowledgeBaseViewProps) {
               className="w-full border border-input bg-background px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
             />
             <div className="flex gap-2">
-              <button
-                type="submit"
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-              >
-                Publicar
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                className="px-4 py-2 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 transition-colors"
-              >
+              <Button type="submit">Publicar</Button>
+              <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>
                 Cancelar
-              </button>
+              </Button>
             </div>
           </form>
         </div>
@@ -185,12 +174,12 @@ export function KnowledgeBaseView({ isAdmin }: KnowledgeBaseViewProps) {
                   </span>
                   {isAdmin && (
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="p-1 hover:bg-muted rounded">
+                      <Button variant="ghost" size="icon">
                         <Edit2 className="w-4 h-4 text-muted-foreground" />
-                      </button>
-                      <button className="p-1 hover:bg-destructive/10 rounded">
+                      </Button>
+                      <Button variant="ghost" size="icon" className="hover:bg-destructive/10">
                         <Trash2 className="w-4 h-4 text-destructive" />
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -218,24 +207,21 @@ export function KnowledgeBaseView({ isAdmin }: KnowledgeBaseViewProps) {
       ) : (
         /* Article Detail */
         <div className="bg-card border border-border rounded-lg p-6 shadow-soft">
-          <button
-            onClick={() => setSelectedArticle(null)}
-            className="mb-4 text-sm text-primary hover:underline"
-          >
+          <Button variant="link" onClick={() => setSelectedArticle(null)} className="p-0 h-auto mb-4">
             ← Voltar
-          </button>
+          </Button>
           <div className="flex items-start justify-between mb-4">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
               {selectedArticle.category}
             </span>
             {isAdmin && (
               <div className="flex gap-2">
-                <button className="p-2 hover:bg-muted rounded-lg">
+                <Button variant="ghost" size="icon">
                   <Edit2 className="w-4 h-4 text-muted-foreground" />
-                </button>
-                <button className="p-2 hover:bg-destructive/10 rounded-lg">
+                </Button>
+                <Button variant="ghost" size="icon" className="hover:bg-destructive/10">
                   <Trash2 className="w-4 h-4 text-destructive" />
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -256,14 +242,14 @@ export function KnowledgeBaseView({ isAdmin }: KnowledgeBaseViewProps) {
           <div className="border-t border-border pt-6 mt-6">
             <p className="text-sm text-muted-foreground mb-3">Este artigo foi útil?</p>
             <div className="flex gap-2">
-              <button className="flex items-center gap-2 px-4 py-2 border border-input rounded-lg hover:bg-success/10 hover:border-success transition-colors">
+              <Button variant="outline" className="gap-2 hover:border-success">
                 <ThumbsUp className="w-4 h-4" />
                 Sim ({selectedArticle.helpful})
-              </button>
-              <button className="flex items-center gap-2 px-4 py-2 border border-input rounded-lg hover:bg-muted transition-colors">
+              </Button>
+              <Button variant="outline" className="gap-2">
                 <MessageCircle className="w-4 h-4" />
                 Abrir chamado
-              </button>
+              </Button>
             </div>
           </div>
         </div>

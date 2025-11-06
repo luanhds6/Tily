@@ -13,9 +13,10 @@ interface TicketListViewProps {
   users: UserType[];
   onTicketClick: (ticketId: string) => void;
   title: string;
+  isAdmin?: boolean;
 }
 
-export function TicketListView({ tickets, users, onTicketClick, title }: TicketListViewProps) {
+export function TicketListView({ tickets, users, onTicketClick, title, isAdmin = false }: TicketListViewProps) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -75,6 +76,13 @@ export function TicketListView({ tickets, users, onTicketClick, title }: TicketL
     if (slaRemaining < 0) return { text: "SLA expirado", color: "text-destructive" };
     if (slaRemaining < 2) return { text: `${Math.round(slaRemaining)}h restante`, color: "text-orange-500" };
     return { text: `${Math.round(slaRemaining)}h restante`, color: "text-muted-foreground" };
+  };
+
+  const renderViewIndicatorColor = (t: Ticket) => {
+    if (!isAdmin) return "";
+    if (t.userViewedReplyAt) return "bg-green-500";
+    if (t.userViewedAt) return "bg-yellow-400";
+    return "bg-muted";
   };
 
   return (
@@ -148,7 +156,21 @@ export function TicketListView({ tickets, users, onTicketClick, title }: TicketL
                   <div className="flex-1 space-y-2">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1">
-                        <h3 className="font-semibold text-foreground text-lg">{ticket.title}</h3>
+                        <div className="flex items-center gap-2">
+                          {isAdmin && (
+                            <span
+                              title={
+                                ticket.userViewedReplyAt
+                                  ? "Usuário leu a resposta"
+                                  : ticket.userViewedAt
+                                  ? "Usuário abriu o chamado"
+                                  : "Ainda não visualizado"
+                              }
+                              className={`inline-block w-2 h-2 rounded-full ${renderViewIndicatorColor(ticket)}`}
+                            />
+                          )}
+                          <h3 className="font-semibold text-foreground text-lg">{ticket.title}</h3>
+                        </div>
                         <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
                           {ticket.description}
                         </p>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Home, Ticket, Users, BarChart3, BookOpen, Settings, LogOut, Menu, X, UserCircle, MessageSquare, AlertCircle, Link as LinkIcon, Globe, FileText, Mail, Bookmark, ChevronUp, ChevronDown } from "lucide-react";
 import { Session } from "../../hooks/useAuth";
+import { useAccessControl } from "@/hooks/useAccessControl";
 
 interface SidebarProps {
   session: Session | null;
@@ -11,8 +12,10 @@ interface SidebarProps {
 
 export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const isAdmin = session && (session.role === "admin" || session.role === "master");
   const isMaster = session && session.role === "master";
+  const access = useAccessControl(session || null);
 
   type QuickLink = {
     id: string;
@@ -44,17 +47,19 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
     }
   }, []);
 
+  const perms = access?.perms?.permissions || {} as Record<string, boolean>;
   const menuItems = [
-    { id: "dashboard", label: "Dashboard", icon: Home, show: true },
-    { id: "chamados", label: "Chamados", icon: Ticket, show: true },
-    { id: "chat", label: "Chat", icon: MessageSquare, show: true },
-    { id: "informativos", label: "Informativos", icon: AlertCircle, show: true },
-    { id: "links", label: "Links Úteis", icon: LinkIcon, show: true },
-    { id: "analytics", label: "Relatórios", icon: BarChart3, show: isAdmin },
-    { id: "knowledge", label: "Base de Conhecimento", icon: BookOpen, show: true },
-    { id: "users", label: "Usuários", icon: Users, show: false },
-    { id: "profile", label: "Perfil", icon: UserCircle, show: !isAdmin },
-    { id: "settings", label: "Configurações", icon: Settings, show: isAdmin },
+    { id: "dashboard", label: "Dashboard", icon: Home, show: !!perms["dashboard"] },
+    { id: "chamados", label: "Chamados", icon: Ticket, show: !!perms["tickets"] },
+    { id: "chat", label: "Chat", icon: MessageSquare, show: !!perms["chat"] },
+    { id: "informativos", label: "Informativos", icon: AlertCircle, show: !!perms["informativos"] },
+    { id: "links", label: "Links Úteis", icon: LinkIcon, show: !!perms["quick_links"] },
+    { id: "analytics", label: "Relatórios", icon: BarChart3, show: isAdmin || !!perms["analytics"] },
+    { id: "knowledge", label: "Base de Conhecimento", icon: BookOpen, show: !!perms["knowledge"] },
+    // Agrupamento: para Admin/Master, esconder "Usuários" e "Perfil" e usar apenas "Configurações"
+    { id: "users", label: "Usuários", icon: Users, show: !!isMaster && !isAdmin },
+    { id: "profile", label: "Perfil", icon: UserCircle, show: !!perms["profile"] && !isAdmin },
+    { id: "settings", label: "Configurações", icon: Settings, show: isAdmin || !!perms["settings"] },
   ];
 
   const handleNavClick = (itemId: string) => {
@@ -156,11 +161,24 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
 
       <div className="p-4 border-t border-sidebar-border sticky bottom-0 bg-sidebar z-10">
         <button
-          onClick={onLogout}
-          className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+          onClick={async () => {
+            if (loggingOut) return;
+            setLoggingOut(true);
+            try {
+              await onLogout();
+            } finally {
+              setLoggingOut(false);
+            }
+          }}
+          disabled={loggingOut}
+          className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
+            loggingOut
+              ? "bg-muted text-muted-foreground cursor-not-allowed"
+              : "bg-destructive/10 text-destructive hover:bg-destructive/20"
+          }`}
         >
           <LogOut className="w-5 h-5 flex-shrink-0" />
-          <span className="font-medium">Sair</span>
+          <span className="font-medium">{loggingOut ? "Saindo..." : "Sair"}</span>
         </button>
       </div>
     </>

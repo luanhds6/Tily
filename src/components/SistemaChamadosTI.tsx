@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useAuth, Session as LegacySession } from "../hooks/useAuth";
 import { useSupabaseAuth } from "../hooks/useSupabaseAuth";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useTickets } from "../hooks/useTickets";
 import { Sidebar } from "./layout/Sidebar";
 import { DashboardView } from "./dashboard/DashboardView";
@@ -25,14 +25,16 @@ import { InformativosView } from "./informativos/InformativosView";
 import { NotificationCenterProvider, useNotificationCenter } from "@/hooks/useNotificationCenter";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import QuickLinksView from "./quick-links/QuickLinksView";
+import { useAccessControl } from "@/hooks/useAccessControl";
 
 function AppWithNotifications() {
+  const navigate = useNavigate();
   // Supabase auth (fonte de verdade para sessão)
   const { user, profile, loading, isAdmin, isMaster, signOut } = useSupabaseAuth();
 
   // Hooks locais existentes (usuários, tickets, etc.)
   const { users, getAdminUsers, createUser, updateUser, deleteUser } = useAuth();
-  const { tickets, createTicket, updateTicket, addMessage, assignTicket, resolveTicket, deleteTicket } = useTickets();
+  const { tickets, createTicket, updateTicket, addMessage, assignTicket, resolveTicket, deleteTicket, markTicketOpenedByAuthor, markTicketReplyReadByAuthor } = useTickets();
   const [view, setView] = useState("dashboard");
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
   const { addNotification } = useNotificationCenter();
@@ -44,6 +46,21 @@ function AppWithNotifications() {
         name: profile?.full_name ?? user.email ?? "Usuário",
         email: user.email ?? "",
         role: profile?.is_master ? "master" : profile?.role === "admin" ? "admin" : "user",
+      }
+    : null;
+
+  const access = useAccessControl(session);
+
+  // Usa a role efetiva vinda do access control para refletir corretamente na UI
+  const displaySession: LegacySession | null = session
+    ? {
+        ...session,
+        role:
+          access?.perms?.role === "master"
+            ? "master"
+            : access?.perms?.role === "admin"
+            ? "admin"
+            : session.role,
       }
     : null;
 
@@ -101,19 +118,42 @@ function AppWithNotifications() {
     );
   }
 
+  // Enquanto carrega permissões, manter indicador
+  if (access.loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-muted-foreground">Validando permissões...</div>
+      </div>
+    );
+  }
+
   const agents = getAdminUsers();
   const myTickets = tickets.filter(t => t.authorId === session?.id);
   const selectedTicket = selectedTicketId ? tickets.find(t => t.id === selectedTicketId) : null;
 
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar session={session!} view={view} onViewChange={handleViewChange} onLogout={() => { signOut(); }} />
+      <Sidebar
+        session={displaySession!}
+        view={view}
+        onViewChange={handleViewChange}
+        onLogout={async () => {
+          const { error } = await signOut();
+          if (error) {
+            console.error("Erro ao sair:", error.message);
+          }
+          // Navega via SPA para maior confiabilidade
+          navigate("/login", { replace: true });
+        }}
+      />
       <main className="flex-1 lg:pt-0 pt-16 md:pr-20">
         {/* Sino de notificações global */}
         <NotificationBell />
-        {view === "dashboard" && <DashboardView tickets={tickets} session={session} agents={agents} onViewChange={handleViewChange} />}
-        {view === "chat" && <ChatView session={session} users={users} />}
-        {view === "chamados" && (
+        {view === "dashboard" && access.perms.permissions["dashboard"] && (
+          <DashboardView tickets={tickets} session={session} agents={agents} onViewChange={handleViewChange} />
+        )}
+        {view === "chat" && access.perms.permissions["chat"] && <ChatView session={session} users={users} />}
+        {view === "chamados" && access.perms.permissions["tickets"] && (
           <TicketsPage
             session={session}
             users={users}
@@ -122,8 +162,8 @@ function AppWithNotifications() {
             onCreateTicket={handleNewTicket}
           />
         )}
-        {view === "informativos" && <InformativosView session={session} />}
-        {view === "links" && <QuickLinksView session={session} />}
+        {view === "informativos" && access.perms.permissions["informativos"] && <InformativosView session={session} />}
+        {view === "links" && access.perms.permissions["quick_links"] && <QuickLinksView session={session} />}
         {view === "detail" && selectedTicket && session && (
           <TicketDetailView
             ticket={selectedTicket}
@@ -135,19 +175,21 @@ function AppWithNotifications() {
             onUpdateStatus={updateTicket}
             onAssignTicket={assignTicket}
             onDeleteTicket={deleteTicket}
+            onMarkOpenedByAuthor={markTicketOpenedByAuthor}
+            onMarkReplyReadByAuthor={markTicketReplyReadByAuthor}
           />
         )}
         {view === "new" && <NewTicketForm onSubmit={handleNewTicket} onCancel={() => setView("chamados")} />}
         {view === "users" && session && isMaster && (
           <ProfilesManagementView />
         )}
-        {view === "analytics" && <AnalyticsView tickets={tickets} agents={agents} />}
-        {view === "knowledge" && <KnowledgeBaseView isAdmin={isAdmin} />}
-        {view === "profile" && <ProfileView session={session} tickets={tickets} />}
+        {view === "analytics" && access.perms.permissions["analytics"] && <AnalyticsView tickets={tickets} agents={agents} />}
+        {view === "knowledge" && access.perms.permissions["knowledge"] && <KnowledgeBaseView isAdmin={isAdmin} />}
+        {view === "profile" && access.perms.permissions["profile"] && <ProfileView session={displaySession!} tickets={tickets} />}
         {view === "settings" && (
-          isAdmin ? (
+          (access.perms.role === "master" || access.perms.role === "admin") ? (
             <AdminSettingsPage
-              session={session}
+              session={displaySession!}
               users={users}
               tickets={tickets}
               onCreateUser={handleCreateUser}
@@ -155,7 +197,11 @@ function AppWithNotifications() {
               onDeleteUser={deleteUser}
             />
           ) : (
-            <SettingsView />
+            access.perms.permissions["settings"] ? <SettingsView /> : (
+              <div className="p-6">
+                <div className="text-sm text-muted-foreground">Sem acesso às configurações.</div>
+              </div>
+            )
           )
         )}
       </main>

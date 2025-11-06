@@ -57,3 +57,61 @@ export async function getCurrentCompany(): Promise<{
 
   return { data, error: error ?? null };
 }
+
+// Helper: extrair domínio do email
+function emailDomain(email: string | null | undefined): string | null {
+  if (!email) return null;
+  const at = email.indexOf("@");
+  if (at === -1) return null;
+  return email.slice(at + 1).toLowerCase();
+}
+
+// Helper: garantir que o usuário tenha um profile; cria com empresa resolvida
+export async function ensureProfileForUser(user: { id: string; email: string | null }): Promise<{ ok: boolean; error: Error | null }>{
+  if (!supabase) return { ok: false, error: new Error("Supabase não configurado") };
+  // Já existe?
+  const { data: existing, error: existingErr } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (existingErr) return { ok: false, error: existingErr };
+  if (existing) return { ok: true, error: null };
+
+  // Resolver empresa por domínio exato; criar se não existir
+  const dom = emailDomain(user.email);
+  if (!dom) return { ok: false, error: new Error("Email inválido para derivar domínio da empresa") };
+
+  let companyId: string | null = null;
+  const { data: byDomain } = await supabase
+    .from("companies")
+    .select("id,domain,is_active")
+    .eq("domain", dom)
+    .maybeSingle();
+  if (byDomain?.id) {
+    companyId = byDomain.id;
+  } else {
+    const { data: created, error: createErr } = await supabase
+      .from("companies")
+      .insert({ name: dom, domain: dom, is_active: true })
+      .select("id")
+      .maybeSingle();
+    if (createErr) return { ok: false, error: createErr };
+    companyId = created?.id ?? null;
+  }
+  if (!companyId) return { ok: false, error: new Error("Falha ao resolver/criar empresa pelo domínio") };
+
+  const { error: insertErr } = await supabase
+    .from("profiles")
+    .insert({
+      user_id: user.id,
+      company_id: companyId,
+      role: "user",
+      is_active: true,
+      is_master: false,
+      full_name: null,
+      phone: null,
+    });
+  if (insertErr) return { ok: false, error: insertErr };
+  return { ok: true, error: null };
+}

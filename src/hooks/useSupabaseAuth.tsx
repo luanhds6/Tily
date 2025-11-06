@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
-import { getCurrentProfile, type ProfileRow } from "../lib/supabase";
+import { getCurrentProfile, ensureProfileForUser, type ProfileRow } from "../lib/supabase";
 
 type AuthUser = {
   id: string;
@@ -15,42 +15,114 @@ export function useSupabaseAuth() {
   useEffect(() => {
     let mounted = true;
 
+    // Failsafe para evitar loading infinito em caso de rede lenta/erro
+    const timeout = setTimeout(() => {
+      if (mounted) setLoading(false);
+    }, 5000);
+
     async function bootstrap() {
-      if (!supabase) {
-        setLoading(false);
-        return;
-      }
-      const { data } = await supabase.auth.getUser();
-      const authUser = data.user ? { id: data.user.id, email: data.user.email } : null;
-      if (!mounted) return;
-      setUser(authUser);
-      if (authUser) {
-        const { data: p } = await getCurrentProfile();
+      try {
+        if (!supabase) {
+          setLoading(false);
+          return;
+        }
+        const { data } = await supabase.auth.getSession();
+        const authUser = data.session?.user ? { id: data.session.user.id, email: data.session.user.email } : null;
         if (!mounted) return;
-        setProfile(p);
+        setUser(authUser);
+        if (authUser) {
+          try {
+            let { data: p } = await getCurrentProfile();
+            if (!p) {
+              await ensureProfileForUser({ id: authUser.id, email: authUser.email });
+              const { data: after } = await getCurrentProfile();
+              p = after ?? null;
+            }
+            if (!mounted) return;
+            setProfile(p);
+          } catch (_) {
+            if (!mounted) return;
+            setProfile(null);
+          }
+        }
+      } catch (_) {
+        // ignora e encerra loading
+      } finally {
+        if (mounted) setLoading(false);
+        clearTimeout(timeout);
       }
-      setLoading(false);
     }
 
     bootstrap();
 
-    const { data: sub } = supabase?.auth.onAuthStateChange(async (event, session) => {
-      const nextUser = session?.user ? { id: session.user.id, email: session.user.email } : null;
-      setUser(nextUser);
-      if (nextUser) {
-        const { data: p } = await getCurrentProfile();
-        setProfile(p);
-      } else {
-        setProfile(null);
+    const { data: sub } = supabase?.auth.onAuthStateChange(async (_event, session) => {
+      try {
+        const nextUser = session?.user ? { id: session.user.id, email: session.user.email } : null;
+        setUser(nextUser);
+        if (nextUser) {
+          try {
+            let { data: p } = await getCurrentProfile();
+            if (!p) {
+              await ensureProfileForUser({ id: nextUser.id, email: nextUser.email });
+              const { data: after } = await getCurrentProfile();
+              p = after ?? null;
+            }
+            setProfile(p);
+          } catch (_) {
+            setProfile(null);
+          }
+        } else {
+          setProfile(null);
+        }
+      } finally {
+        setLoading(false);
       }
     }) ?? { data: { subscription: { unsubscribe() {} } } };
 
     return () => {
       mounted = false;
+      clearTimeout(timeout);
       // @ts-ignore
       sub.subscription?.unsubscribe?.();
     };
   }, []);
+
+  // Heartbeat de presença: atualiza status automaticamente enquanto logado
+  useEffect(() => {
+    if (!supabase || !profile?.user_id) return;
+    let cancelled = false;
+
+    async function setOnline() {
+      try {
+        const update: any = { last_seen_at: new Date().toISOString() };
+        // Usuários comuns: garantimos 'online'; Admin/Master: não sobrescrever status manual (apenas heartbeat)
+        if (!(profile?.is_master || profile?.role === "admin")) {
+          update.presence_status = "online";
+        }
+        await supabase.from("profiles").update(update).eq("user_id", profile.user_id);
+      } catch {}
+    }
+
+    // atualiza imediatamente e a cada 60s
+    setOnline();
+    const timer = setInterval(setOnline, 60000);
+
+    const onUnload = async () => {
+      try {
+        await supabase
+          .from("profiles")
+          .update({ presence_status: "offline", last_seen_at: new Date().toISOString() })
+          .eq("user_id", profile.user_id);
+      } catch {}
+    };
+    window.addEventListener("beforeunload", onUnload);
+
+    return () => {
+      if (cancelled) return;
+      clearInterval(timer);
+      window.removeEventListener("beforeunload", onUnload);
+    };
+  }, [profile?.user_id, profile?.role, profile?.is_master]);
 
   const isMaster = useMemo(() => profile?.is_master === true, [profile]);
   const isAdmin = useMemo(() => profile?.role === "admin" || profile?.is_master === true, [profile]);
@@ -114,8 +186,31 @@ export function useSupabaseAuth() {
   }
 
   async function signOut() {
-    if (!supabase) return { error: new Error("Supabase não configurado") };
+    if (!supabase) {
+      // Limpa estado local mesmo sem cliente Supabase
+      setUser(null);
+      setProfile(null);
+      setLoading(false);
+      return { error: new Error("Supabase não configurado") };
+    }
+    // marca como offline ao sair
+    try {
+      if (profile?.user_id) {
+        await supabase
+          .from("profiles")
+          .update({ presence_status: "offline", last_seen_at: new Date().toISOString() })
+          .eq("user_id", profile.user_id);
+      }
+    } catch {}
     const { error } = await supabase.auth.signOut();
+    // Proativamente limpa estado local e encerra loading
+    setUser(null);
+    setProfile(null);
+    setLoading(false);
+    // Opcional: força avaliação da sessão após signOut
+    try {
+      await supabase.auth.getSession();
+    } catch {}
     return { error };
   }
 
@@ -129,10 +224,13 @@ export function useSupabaseAuth() {
 
   async function listProfilesByCompany() {
     if (!supabase) return { data: [], error: new Error("Supabase não configurado") };
-    const { data, error } = await supabase
+    const query = supabase
       .from("profiles")
       .select("*")
       .order("created_at", { ascending: false });
+    const { data, error } = profile?.company_id
+      ? await query.eq("company_id", profile.company_id)
+      : await query;
     return { data: data ?? [], error };
   }
 

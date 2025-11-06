@@ -14,6 +14,88 @@ export type Database = {
   }
   public: {
     Tables: {
+      access_categories: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          is_active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          is_active?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          is_active?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
+      access_category_permissions: {
+        Row: {
+          id: string
+          category_id: string
+          resource_key: string
+          allow: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          category_id: string
+          resource_key: string
+          allow?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          category_id?: string
+          resource_key?: string
+          allow?: boolean
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "access_category_permissions_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "access_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_access_categories: {
+        Row: {
+          user_id: string
+          category_id: string
+          assigned_at: string
+        }
+        Insert: {
+          user_id: string
+          category_id: string
+          assigned_at?: string
+        }
+        Update: {
+          user_id?: string
+          category_id?: string
+          assigned_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_access_categories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "access_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       companies: {
         Row: {
           created_at: string
@@ -44,6 +126,41 @@ export type Database = {
         }
         Relationships: []
       }
+      business_units: {
+        Row: {
+          id: string
+          company_id: string
+          name: string
+          code: string | null
+          is_active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          company_id: string
+          name: string
+          code?: string | null
+          is_active?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          company_id?: string
+          name?: string
+          code?: string | null
+          is_active?: boolean
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_units_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           company_id: string
@@ -51,6 +168,8 @@ export type Database = {
           full_name: string | null
           is_active: boolean
           is_master: boolean
+          presence_status: "online" | "offline" | "away"
+          last_seen_at: string
           phone: string | null
           role: string
           updated_at: string
@@ -62,6 +181,8 @@ export type Database = {
           full_name?: string | null
           is_active?: boolean
           is_master?: boolean
+          presence_status?: "online" | "offline" | "away"
+          last_seen_at?: string
           phone?: string | null
           role?: string
           updated_at?: string
@@ -73,6 +194,8 @@ export type Database = {
           full_name?: string | null
           is_active?: boolean
           is_master?: boolean
+          presence_status?: "online" | "offline" | "away"
+          last_seen_at?: string
           phone?: string | null
           role?: string
           updated_at?: string
@@ -88,12 +211,48 @@ export type Database = {
           },
         ]
       }
+      user_business_units: {
+        Row: {
+          user_id: string
+          unit_id: string
+          assigned_at: string
+        }
+        Insert: {
+          user_id: string
+          unit_id: string
+          assigned_at?: string
+        }
+        Update: {
+          user_id?: string
+          unit_id?: string
+          assigned_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_business_units_user_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "user_business_units_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_effective_permissions: {
+        Args: { p_user_id: string }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

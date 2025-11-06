@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Ticket, Message } from "@/hooks/useTickets";
 import { Session, User } from "@/hooks/useAuth";
 import { Card } from "@/components/ui/card";
@@ -19,6 +19,8 @@ interface TicketDetailViewProps {
   onUpdateStatus: (ticketId: string, updates: Partial<Ticket>) => void;
   onAssignTicket: (ticketId: string, agentId: string, agentName: string) => void;
   onDeleteTicket: (ticketId: string) => void;
+  onMarkOpenedByAuthor: (ticketId: string, userId: string) => void;
+  onMarkReplyReadByAuthor: (ticketId: string, userId: string) => void;
 }
 
 export function TicketDetailView({
@@ -31,6 +33,8 @@ export function TicketDetailView({
   onUpdateStatus,
   onAssignTicket,
   onDeleteTicket,
+  onMarkOpenedByAuthor,
+  onMarkReplyReadByAuthor,
 }: TicketDetailViewProps) {
   const [replyText, setReplyText] = useState("");
   const [attachments, setAttachments] = useState<any[]>([]);
@@ -43,6 +47,17 @@ export function TicketDetailView({
   const canDelete = !wasResolved && (isAdmin || isOwner);
   const canReopen = isResolved && (isAdmin || isOwner);
   const author = users.find((u) => u.id === ticket.authorId);
+
+  // Marca visualização/leitura pelo autor ao abrir o detalhe
+  useEffect(() => {
+    if (isOwner) {
+      onMarkOpenedByAuthor(ticket.id, session.id);
+      if (ticket.lastAdminReplyAt && !ticket.userViewedReplyAt) {
+        onMarkReplyReadByAuthor(ticket.id, session.id);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticket.id, ticket.lastAdminReplyAt, ticket.userViewedReplyAt, isOwner]);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -72,7 +87,11 @@ export function TicketDetailView({
     onAddMessage(ticket.id, session.id, session.name, replyText, attachments);
     // Se um agente/admin respondeu ao ticket de um usuário, muda status para "Aguardando"
     if (isAdmin && session.id !== ticket.authorId) {
-      onUpdateStatus(ticket.id, { status: "Aguardando" });
+      onUpdateStatus(ticket.id, { status: "Aguardando", lastAdminReplyAt: new Date().toISOString() });
+    }
+    // Se o autor respondeu, considera que leu a última resposta do admin
+    if (isOwner && ticket.lastAdminReplyAt && !ticket.userViewedReplyAt) {
+      onMarkReplyReadByAuthor(ticket.id, session.id);
     }
     setReplyText("");
     setAttachments([]);

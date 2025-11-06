@@ -29,6 +29,10 @@ export interface Ticket {
   tags: string[];
   sla: number; // hours
   messages: Message[];
+  // Indicadores de visualização (visíveis apenas para admins)
+  userViewedAt?: string; // quando o autor abriu o ticket
+  lastAdminReplyAt?: string; // última resposta de um admin
+  userViewedReplyAt?: string; // quando o autor visualizou uma resposta do admin
 }
 
 function uid(prefix = "id") {
@@ -199,6 +203,9 @@ export function useTickets() {
           createdAt: new Date().toISOString(),
         },
       ],
+      userViewedAt: undefined,
+      lastAdminReplyAt: undefined,
+      userViewedReplyAt: undefined,
     };
 
     // Otimista: atualiza estado local
@@ -309,6 +316,28 @@ export function useTickets() {
     }
   };
 
+  // Marca quando o autor abriu o ticket (indicador amarelo)
+  const markTicketOpenedByAuthor = (ticketId: string, userId: string) => {
+    setTickets((prev) =>
+      prev.map((t) =>
+        t.id === ticketId && t.authorId === userId && !t.userViewedAt
+          ? { ...t, userViewedAt: new Date().toISOString() }
+          : t
+      )
+    );
+  };
+
+  // Marca quando o autor leu a resposta do admin (indicador verde)
+  const markTicketReplyReadByAuthor = (ticketId: string, userId: string) => {
+    setTickets((prev) =>
+      prev.map((t) =>
+        t.id === ticketId && t.authorId === userId && t.lastAdminReplyAt && !t.userViewedReplyAt
+          ? { ...t, userViewedReplyAt: new Date().toISOString() }
+          : t
+      )
+    );
+  };
+
   const assignTicket = (ticketId: string, agentId: string, agentName: string) => {
     updateTicket(ticketId, {
       assignedTo: agentId,
@@ -342,6 +371,8 @@ export function useTickets() {
     createTicket,
     updateTicket,
     addMessage,
+    markTicketOpenedByAuthor,
+    markTicketReplyReadByAuthor,
     assignTicket,
     resolveTicket,
     deleteTicket,

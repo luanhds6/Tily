@@ -3,6 +3,7 @@ import { User as UserIcon, Mail, Shield, Calendar, Edit2, Save, X, ImagePlus } f
 import { Session, useAuth } from "../../hooks/useAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Ticket } from "../../hooks/useTickets";
+import { Button } from "@/components/ui/button";
 
 interface ProfileViewProps {
   session: Session;
@@ -66,12 +67,9 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
                 </span>
               </div>
             </div>
-            <button
-              onClick={() => setEditing(!editing)}
-              className="p-2 hover:bg-muted rounded-lg transition-colors"
-            >
+            <Button variant="ghost" size="icon" onClick={() => setEditing(!editing)}>
               {editing ? <X className="w-5 h-5 text-muted-foreground" /> : <Edit2 className="w-5 h-5 text-muted-foreground" />}
-            </button>
+            </Button>
           </div>
 
           {editing ? (
@@ -124,24 +122,20 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
                 <p className="text-xs text-muted-foreground mt-1">PNG/JPEG até ~1MB recomendado.</p>
               </div>
               <div className="flex gap-2">
-                <button
+                <Button
                   type="button"
                   onClick={() => {
                     if (avatarPreview) setMyAvatar(avatarPreview);
                     setEditing(false);
                   }}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+                  className="gap-2"
                 >
                   <Save className="w-4 h-4" />
                   Salvar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditing(false)}
-                  className="px-4 py-2 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 transition-colors"
-                >
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => setEditing(false)}>
                   Cancelar
-                </button>
+                </Button>
               </div>
             </form>
           ) : (
@@ -195,13 +189,9 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
       {/* Security Section */}
       <div className="bg-card border border-border rounded-lg p-6 shadow-soft">
         <h3 className="text-lg font-semibold text-foreground mb-4">Segurança</h3>
-        <div className="space-y-3">
-          <button className="w-full sm:w-auto px-4 py-2 border border-input rounded-lg hover:bg-muted transition-colors text-sm">
-            Alterar Senha
-          </button>
-          <button className="w-full sm:w-auto px-4 py-2 border border-input rounded-lg hover:bg-muted transition-colors text-sm ml-0 sm:ml-2">
-            Autenticação em Dois Fatores
-          </button>
+        <div className="space-y-3 sm:space-y-0 sm:flex sm:items-center sm:gap-2">
+          <Button variant="outline" className="w-full sm:w-auto text-sm">Alterar Senha</Button>
+          <Button variant="outline" className="w-full sm:w-auto text-sm">Autenticação em Dois Fatores</Button>
         </div>
       </div>
     </div>

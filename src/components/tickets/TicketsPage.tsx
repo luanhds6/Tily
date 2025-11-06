@@ -29,7 +29,7 @@ export function TicketsPage({ session, users, tickets, onTicketClick, onCreateTi
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="meus">Meus Chamados</TabsTrigger>
-          <TabsTrigger value="todos">Todos Chamados</TabsTrigger>
+          {isAdmin && <TabsTrigger value="todos">Todos Chamados</TabsTrigger>}
           <TabsTrigger value="novo">Novo Chamado</TabsTrigger>
         </TabsList>
 
@@ -39,17 +39,21 @@ export function TicketsPage({ session, users, tickets, onTicketClick, onCreateTi
             users={users}
             onTicketClick={onTicketClick}
             title="Meus Chamados"
+            isAdmin={false}
           />
         </TabsContent>
 
-        <TabsContent value="todos">
-          <TicketListView
-            tickets={tickets}
-            users={users}
-            onTicketClick={onTicketClick}
-            title="Todos os Chamados"
-          />
-        </TabsContent>
+        {isAdmin && (
+          <TabsContent value="todos">
+            <TicketListView
+              tickets={tickets}
+              users={users}
+              onTicketClick={onTicketClick}
+              title="Todos os Chamados"
+              isAdmin={true}
+            />
+          </TabsContent>
+        )}
 
         <TabsContent value="novo">
           <NewTicketForm

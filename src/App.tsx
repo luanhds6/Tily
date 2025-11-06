@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import SeedMasterPage from "./pages/SeedMaster";
+import SeedTestUsersPage from "./pages/SeedTestUsers";
 
 const queryClient = new QueryClient();
 
@@ -20,6 +21,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
           {import.meta.env.DEV && <Route path="/seed" element={<SeedMasterPage />} />}
+          {import.meta.env.DEV && <Route path="/seed-test-users" element={<SeedTestUsersPage />} />}
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

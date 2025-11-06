@@ -4,6 +4,7 @@ import { Ticket as TicketType } from "../../hooks/useTickets";
 import { Session } from "../../hooks/useAuth";
 import { AgentRanking } from "./AgentRanking";
 import { User } from "../../hooks/useAuth";
+import { Button } from "@/components/ui/button";
 
 interface DashboardViewProps {
   tickets: TicketType[];
@@ -217,12 +218,13 @@ export function DashboardView({ tickets, session, agents, onViewChange }: Dashbo
             <div className="p-8 text-center text-muted-foreground">
               <Ticket className="w-12 h-12 mx-auto mb-3 opacity-20" />
               <p>Nenhum chamado encontrado</p>
-              <button
+              <Button
+                variant="link"
                 onClick={() => onViewChange("chamados")}
-                className="mt-3 text-primary hover:underline text-sm"
+                className="mt-3 text-sm"
               >
                 Criar primeiro chamado
-              </button>
+              </Button>
             </div>
           ) : (
             recentTickets.map((ticket) => (
