@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSupabaseAuth } from "../hooks/useSupabaseAuth";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,12 +9,11 @@ import { Ticket } from "lucide-react";
 
 export default function Login() {
   const navigate = useNavigate();
-  const { user, profile, loading, signIn, signUp, signOut, sendPasswordReset, isAdmin, isMaster } = useSupabaseAuth();
+  const { user, loading, signIn, signUp, sendPasswordReset } = useSupabaseAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [status, setStatus] = useState<string>("");
-  const [busy, setBusy] = useState(false);
 
   async function onLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -38,6 +37,12 @@ export default function Login() {
     else setStatus("Email de recuperação enviado, verifique sua caixa de entrada.");
   }
 
+  useEffect(() => {
+    if (!loading && user) {
+      navigate("/", { replace: true });
+    }
+  }, [user, loading, navigate]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -49,49 +54,7 @@ export default function Login() {
   if (user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Card className="max-w-lg w-full mx-4 p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-              <Ticket className="w-6 h-6 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold">Tily</h1>
-              <p className="text-xs text-muted-foreground">Sistema de Chamados</p>
-            </div>
-          </div>
-          <h2 className="text-lg font-semibold">Você está autenticado</h2>
-          <p className="text-sm text-muted-foreground mt-1">Email: {user.email}</p>
-          <div className="mt-4 text-sm">
-            <div>Perfil: {profile ? profile.full_name ?? "(sem nome)" : "(não encontrado)"}</div>
-            {profile && <div className="mt-1">Empresa: {profile.company_id}</div>}
-            <div className="mt-1">Acesso: {isMaster ? "Master" : isAdmin ? "Admin" : "Usuário"}</div>
-          </div>
-          <div className="mt-6 flex gap-2">
-            <Button onClick={() => navigate("/")} className="flex-1">
-              Ir para o sistema
-            </Button>
-            <Button
-              variant="outline"
-              className="flex-1"
-              disabled={busy}
-              onClick={async () => {
-                if (busy) return;
-                setBusy(true);
-                try {
-                  const { error } = await signOut();
-                  if (error) {
-                    console.error("Erro ao sair:", error.message);
-                  }
-                  navigate("/login", { replace: true });
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              {busy ? "Saindo..." : "Sair"}
-            </Button>
-          </div>
-        </Card>
+        <div className="text-muted-foreground">Redirecionando...</div>
       </div>
     );
   }

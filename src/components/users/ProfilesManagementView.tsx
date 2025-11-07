@@ -34,9 +34,9 @@ export default function ProfilesManagementView() {
   const [inviteMaster, setInviteMaster] = useState<boolean>(false);
   const [inviting, setInviting] = useState<boolean>(false);
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
-  const [createDirect, setCreateDirect] = useState<boolean>(false);
   const [password, setPassword] = useState<string>("");
   const [unitId, setUnitId] = useState<string>("");
+  const [createOpen, setCreateOpen] = useState<boolean>(false);
 
   // Modal de edição
   const [editOpen, setEditOpen] = useState<boolean>(false);
@@ -52,13 +52,17 @@ export default function ProfilesManagementView() {
     if (error) {
       setState({ loading: false, error: error.message });
     } else {
-      setProfiles(data);
+      // Evita duplicações caso a view retorne múltiplas linhas por usuário
+      const uniqueProfiles = Array.from(
+        new Map((data || []).map((p: any) => [p.user_id, p])).values(),
+      );
+      setProfiles(uniqueProfiles);
       setState({ loading: false, error: null });
       // Carregar categorias, unidades e atribuições quando perfis forem obtidos
       await loadCategories();
       await loadUnits();
-      await loadAssignments(data);
-      await loadUnitAssignments(data);
+      await loadAssignments(uniqueProfiles);
+      await loadUnitAssignments(uniqueProfiles);
     }
   }
 
@@ -209,7 +213,7 @@ export default function ProfilesManagementView() {
   function openEditModal(p: any) {
     setEditTarget(p);
     setOpMsg("");
-    setResetEmail("");
+    setResetEmail(p?.email ?? "");
     setEditOpen(true);
     const unitId = unitAssignments[p.user_id] ?? "";
     setEditForm({ full_name: p.full_name ?? "", phone: p.phone ?? "", role: (p.is_master ? "admin" : (p.role as any)) ?? "user", unitId });
@@ -258,11 +262,9 @@ export default function ProfilesManagementView() {
     if (!window.confirm("Tem certeza que deseja excluir o perfil? Esta ação é irreversível.")) return;
     setOpBusy(true);
     try {
-      // Remove perfil e atribuições relacionadas
-      await supabase.from("profiles").delete().eq("user_id", editTarget.user_id);
-      await supabase.from("user_access_categories").delete().eq("user_id", editTarget.user_id);
-      await supabase.from("user_business_units").delete().eq("user_id", editTarget.user_id);
-      setOpMsg("Perfil excluído.");
+      const { error } = await supabase.rpc("admin_delete_user" as any, { p_user_id: editTarget.user_id });
+      if (error) throw error;
+      setOpMsg("Usuário excluído.");
       setEditOpen(false);
       setEditTarget(null);
       refresh();
@@ -336,49 +338,35 @@ export default function ProfilesManagementView() {
       setInviteMsg("Informe um email válido");
       return;
     }
-    setInviting(true);
-    let data: any = null;
-    let error: any = null;
-    if (createDirect) {
-      if (!password.trim()) {
-        setInviteMsg("Informe uma senha para criação direta");
-        setInviting(false);
-        return;
-      }
-      const resp = await supabase.functions.invoke("admin-create-user", {
-        body: {
-          email: email.trim(),
-          password: password.trim(),
-          full_name: fullName || null,
-          phone: phone || null,
-          role,
-          is_master: isMaster ? inviteMaster : false,
-          company_id: me?.company_id,
-          unit_id: unitId || null,
-        },
-      });
-      data = resp.data;
-      error = resp.error;
-    } else {
-      const resp = await supabase.functions.invoke("invite-user", {
-        body: {
-          email: email.trim(),
-          full_name: fullName || null,
-          phone: phone || null,
-          role,
-          is_master: isMaster ? inviteMaster : false,
-          company_id: me?.company_id,
-          redirectTo: window.location.origin + "/login",
-        },
-      });
-      data = resp.data;
-      error = resp.error;
+    if (!password.trim()) {
+      setInviteMsg("Informe uma senha para criação");
+      setInviting(false);
+      return;
     }
+
+    setInviting(true);
+    const { data, error } = await supabase.rpc("admin_create_user" as any, {
+      p_email: email.trim(),
+      p_password: password.trim(),
+      p_full_name: fullName || null,
+      p_role: role,
+      p_is_master: isMaster ? inviteMaster : false,
+    });
     setInviting(false);
+
     if (error) {
       setInviteMsg(`Erro: ${error.message}`);
     } else {
-      setInviteMsg(createDirect ? "Usuário criado e perfil associado." : "Convite enviado e perfil criado.");
+      const newUserId = data as string | null;
+      if (newUserId) {
+        if (unitId) {
+          await setUserUnit(newUserId, unitId || null);
+        }
+        if (assignments[newUserId] !== undefined) {
+          await setUserCategory(newUserId, assignments[newUserId]);
+        }
+      }
+      setInviteMsg("Usuário criado no Supabase.");
       setEmail("");
       setFullName("");
       setPhone("");
@@ -386,110 +374,137 @@ export default function ProfilesManagementView() {
       setInviteMaster(false);
       setPassword("");
       setUnitId("");
+      setCreateOpen(false);
       refresh();
     }
   }
 
+  function openCreateModal() {
+    setEmail("");
+    setFullName("");
+    setPhone("");
+    setRole("user");
+    setInviteMaster(false);
+    setPassword("");
+    setUnitId("");
+    setInviteMsg(null);
+    setCreateOpen(true);
+  }
+
   return (
     <div className="p-4">
-      <div className="mb-4">
-        <h2 className="text-xl font-semibold">Gestão de Perfis (Supabase)</h2>
-        <p className="text-sm text-muted-foreground">
-          Administre os perfis da empresa: ativação, cargos e master.
-        </p>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold">Gestão de Perfis (Supabase)</h2>
+          <p className="text-sm text-muted-foreground">
+            Administre os perfis da empresa: ativação, cargos e master.
+          </p>
+        </div>
+        {isMaster && (
+          <Button onClick={openCreateModal}>Novo usuário</Button>
+        )}
       </div>
 
-      {/* Formulário de convite/criação */}
-      <div className="mb-6 border rounded-md p-3">
-        <div className="font-medium mb-2">Cadastrar novo usuário</div>
-        <div className="grid md:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs text-muted-foreground mb-1">Email</label>
-            <input
-              className="w-full border rounded px-2 py-1"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="usuario@empresa.com"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-muted-foreground mb-1">Nome completo</label>
-            <input
-              className="w-full border rounded px-2 py-1"
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="Nome do usuário"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-muted-foreground mb-1">Telefone</label>
-            <input
-              className="w-full border rounded px-2 py-1"
-              type="text"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="(11) 99999-9999"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-muted-foreground mb-1">Cargo</label>
-            <select
-              className="w-full border rounded px-2 py-1"
-              value={role}
-              onChange={(e) => setInviteRole(e.target.value as any)}
-            >
-              <option value="user">Usuário</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-muted-foreground mb-1">Unidade de negócio</label>
-            <select
-              className="w-full border rounded px-2 py-1"
-              value={unitId}
-              onChange={(e) => setUnitId(e.target.value)}
-            >
-              <option value="">Sem unidade</option>
-              {units.map((u) => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
-          </div>
-          {isMaster && (
-            <div className="flex items-center gap-2">
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) {
+            setInviteMsg(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Novo usuário</DialogTitle>
+            <DialogDescription>Informe os dados para criar um novo acesso no Supabase.</DialogDescription>
+          </DialogHeader>
+          <div className="grid md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Email</label>
               <input
-                id="inviteMaster"
-                type="checkbox"
-                checked={inviteMaster}
-                onChange={(e) => setInviteMaster(e.target.checked)}
+                className="w-full border rounded px-2 py-1"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="usuario@empresa.com"
               />
-              <label htmlFor="inviteMaster" className="text-sm">Convidar como Master</label>
             </div>
-          )}
-        </div>
-        <div className="mt-2 flex items-center gap-2">
-          <input id="createDirect" type="checkbox" checked={createDirect} onChange={(e) => setCreateDirect(e.target.checked)} />
-          <label htmlFor="createDirect" className="text-sm">Criar imediatamente (sem enviar convite)</label>
-        </div>
-        {createDirect && (
-          <div className="mt-2">
-            <label className="block text-xs text-muted-foreground mb-1">Senha</label>
-            <input className="w-full border rounded px-2 py-1" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Defina a senha inicial" />
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Nome completo</label>
+              <input
+                className="w-full border rounded px-2 py-1"
+                type="text"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="Nome do usuário"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Telefone</label>
+              <input
+                className="w-full border rounded px-2 py-1"
+                type="text"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="(11) 99999-9999"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Senha inicial</label>
+              <input
+                className="w-full border rounded px-2 py-1"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Defina a senha inicial"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Cargo</label>
+              <select
+                className="w-full border rounded px-2 py-1"
+                value={role}
+                onChange={(e) => setInviteRole(e.target.value as any)}
+              >
+                <option value="user">Usuário</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Unidade de negócio</label>
+              <select
+                className="w-full border rounded px-2 py-1"
+                value={unitId}
+                onChange={(e) => setUnitId(e.target.value)}
+              >
+                <option value="">Sem unidade</option>
+                {units.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </div>
+            {isMaster && (
+              <div className="flex items-center gap-2">
+                <input
+                  id="inviteMaster"
+                  type="checkbox"
+                  checked={inviteMaster}
+                  onChange={(e) => setInviteMaster(e.target.checked)}
+                />
+                <label htmlFor="inviteMaster" className="text-sm">Conceder acesso Master</label>
+              </div>
+            )}
           </div>
-        )}
-        <div className="mt-3 flex items-center gap-2">
-          <button
-            className="px-3 py-1 border rounded hover:bg-accent"
-            onClick={inviteUser}
-            disabled={inviting}
-          >
-            {inviting ? (createDirect ? "Criando..." : "Enviando convite...") : (createDirect ? "Criar usuário" : "Enviar convite")}
-          </button>
-          {inviteMsg && <span className="text-sm text-muted-foreground">{inviteMsg}</span>}
-        </div>
-      </div>
+          {inviteMsg && <p className="text-sm text-muted-foreground mt-2">{inviteMsg}</p>}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={inviting}>Cancelar</Button>
+            <Button onClick={inviteUser} disabled={inviting}>
+              {inviting ? "Criando..." : "Criar usuário"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {state.loading && (
         <div className="text-muted-foreground">Carregando perfis...</div>

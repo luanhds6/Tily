@@ -1,131 +1,167 @@
-import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabase";
-import { getCurrentProfile, ensureProfileForUser, type ProfileRow } from "../lib/supabase";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { User } from "@supabase/supabase-js";
+import { supabase, type ProfileRow } from "../lib/supabase";
+
+type SessionRole = "user" | "admin" | "master";
 
 type AuthUser = {
   id: string;
   email: string | null;
+  role: SessionRole;
+  fullName: string | null;
+  companyId: string | null;
 };
 
+type LightweightProfile = {
+  user_id: string;
+  full_name: string | null;
+  role: SessionRole;
+  is_master: boolean;
+  company_id: string | null;
+  is_active: boolean;
+};
+
+function deriveRole(user: User | null, profile: ProfileRow | null): SessionRole {
+  if (profile) {
+    if (profile.is_master) return "master";
+    if (profile.role === "master") return "master";
+    if (profile.role === "admin") return "admin";
+  }
+  if (!user) return "user";
+  const appMeta = user.app_metadata as Record<string, unknown> | undefined;
+  const userMeta = user.user_metadata as Record<string, unknown> | undefined;
+  const appRole = (appMeta?.role as SessionRole | undefined) ?? undefined;
+  const metaRole = (userMeta?.role as SessionRole | undefined) ?? undefined;
+  if (appMeta?.is_master === true || userMeta?.is_master === true || appMeta?.is_super_admin === true) {
+    return "master";
+  }
+  if (appRole === "master" || metaRole === "master") {
+    return "master";
+  }
+  if (appRole === "admin" || metaRole === "admin") {
+    return "admin";
+  }
+  return "user";
+}
+
+function deriveProfile(user: User | null, role: SessionRole): LightweightProfile | null {
+  if (!user) return null;
+  const fullName = (user.user_metadata?.full_name as string | undefined) ?? null;
+  const companyId = (user.user_metadata?.company_id as string | undefined) ?? null;
+  return {
+    user_id: user.id,
+    full_name: fullName,
+    role,
+    is_master: role === "master",
+    company_id: companyId,
+    is_active: true,
+  };
+}
+
 export function useSupabaseAuth() {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [profile, setProfile] = useState<ProfileRow | null>(null);
+  const [sessionUser, setSessionUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [profileRow, setProfileRow] = useState<ProfileRow | null>(null);
+  const [profileLoading, setProfileLoading] = useState<boolean>(false);
 
   useEffect(() => {
     let mounted = true;
 
-    // Failsafe para evitar loading infinito em caso de rede lenta/erro
-    const timeout = setTimeout(() => {
-      if (mounted) setLoading(false);
-    }, 5000);
-
     async function bootstrap() {
       try {
         if (!supabase) {
-          setLoading(false);
+          if (mounted) setLoading(false);
           return;
         }
         const { data } = await supabase.auth.getSession();
-        const authUser = data.session?.user ? { id: data.session.user.id, email: data.session.user.email } : null;
         if (!mounted) return;
-        setUser(authUser);
-        if (authUser) {
-          try {
-            let { data: p } = await getCurrentProfile();
-            if (!p) {
-              await ensureProfileForUser({ id: authUser.id, email: authUser.email });
-              const { data: after } = await getCurrentProfile();
-              p = after ?? null;
-            }
-            if (!mounted) return;
-            setProfile(p);
-          } catch (_) {
-            if (!mounted) return;
-            setProfile(null);
-          }
+        const nextUser = data.session?.user ?? null;
+        setSessionUser(nextUser);
+        if (mounted) {
+          setProfileRow(null);
         }
-      } catch (_) {
-        // ignora e encerra loading
       } finally {
         if (mounted) setLoading(false);
-        clearTimeout(timeout);
       }
     }
 
     bootstrap();
 
-    const { data: sub } = supabase?.auth.onAuthStateChange(async (_event, session) => {
-      try {
-        const nextUser = session?.user ? { id: session.user.id, email: session.user.email } : null;
-        setUser(nextUser);
-        if (nextUser) {
-          try {
-            let { data: p } = await getCurrentProfile();
-            if (!p) {
-              await ensureProfileForUser({ id: nextUser.id, email: nextUser.email });
-              const { data: after } = await getCurrentProfile();
-              p = after ?? null;
-            }
-            setProfile(p);
-          } catch (_) {
-            setProfile(null);
-          }
-        } else {
-          setProfile(null);
-        }
-      } finally {
+    const { data: sub } =
+      supabase?.auth.onAuthStateChange((_event, session) => {
+        setSessionUser(session?.user ?? null);
         setLoading(false);
-      }
-    }) ?? { data: { subscription: { unsubscribe() {} } } };
+        setProfileRow(null);
+      }) ?? { data: { subscription: { unsubscribe() {} } } };
 
     return () => {
       mounted = false;
-      clearTimeout(timeout);
       // @ts-ignore
       sub.subscription?.unsubscribe?.();
     };
   }, []);
 
-  // Heartbeat de presença: atualiza status automaticamente enquanto logado
-  useEffect(() => {
-    if (!supabase || !profile?.user_id) return;
-    let cancelled = false;
-
-    async function setOnline() {
-      try {
-        const update: any = { last_seen_at: new Date().toISOString() };
-        // Usuários comuns: garantimos 'online'; Admin/Master: não sobrescrever status manual (apenas heartbeat)
-        if (!(profile?.is_master || profile?.role === "admin")) {
-          update.presence_status = "online";
-        }
-        await supabase.from("profiles").update(update).eq("user_id", profile.user_id);
-      } catch {}
+  const loadProfile = useCallback(async (userId: string) => {
+    if (!supabase) return;
+    setProfileLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (error) {
+        console.error("Falha ao carregar perfil do Supabase:", error.message);
+        setProfileRow(null);
+        return;
+      }
+      setProfileRow(data ?? null);
+    } finally {
+      setProfileLoading(false);
     }
+  }, []);
 
-    // atualiza imediatamente e a cada 60s
-    setOnline();
-    const timer = setInterval(setOnline, 60000);
+  useEffect(() => {
+    if (!sessionUser) {
+      setProfileRow(null);
+      return;
+    }
+    loadProfile(sessionUser.id).catch((err) => {
+      console.error("Erro inesperado ao carregar perfil:", err);
+    });
+  }, [sessionUser, loadProfile]);
 
-    const onUnload = async () => {
-      try {
-        await supabase
-          .from("profiles")
-          .update({ presence_status: "offline", last_seen_at: new Date().toISOString() })
-          .eq("user_id", profile.user_id);
-      } catch {}
+  const role = useMemo(() => deriveRole(sessionUser, profileRow), [sessionUser, profileRow]);
+
+  const user: AuthUser | null = useMemo(() => {
+    if (!sessionUser) return null;
+    const fullName = (sessionUser.user_metadata?.full_name as string | undefined) ?? null;
+    const companyId = (sessionUser.user_metadata?.company_id as string | undefined) ?? null;
+    return {
+      id: sessionUser.id,
+      email: sessionUser.email,
+      role,
+      fullName,
+      companyId,
     };
-    window.addEventListener("beforeunload", onUnload);
+  }, [sessionUser, role]);
 
-    return () => {
-      if (cancelled) return;
-      clearInterval(timer);
-      window.removeEventListener("beforeunload", onUnload);
-    };
-  }, [profile?.user_id, profile?.role, profile?.is_master]);
+  const profile = useMemo(() => {
+    if (profileRow) {
+      return {
+        user_id: profileRow.user_id,
+        full_name: profileRow.full_name,
+        role: (profileRow.role as SessionRole) ?? "user",
+        is_master: profileRow.is_master ?? false,
+        company_id: profileRow.company_id,
+        is_active: profileRow.is_active ?? true,
+      };
+    }
+    return deriveProfile(sessionUser, role);
+  }, [profileRow, sessionUser, role]);
 
-  const isMaster = useMemo(() => profile?.is_master === true, [profile]);
-  const isAdmin = useMemo(() => profile?.role === "admin" || profile?.is_master === true, [profile]);
+  const isMaster = useMemo(() => role === "master", [role]);
+  const isAdmin = useMemo(() => role === "admin" || role === "master", [role]);
 
   async function signIn(email: string, password: string) {
     if (!supabase) return { error: new Error("Supabase não configurado") };
@@ -135,78 +171,34 @@ export function useSupabaseAuth() {
 
   async function signUp(email: string, password: string, opts?: { full_name?: string; phone?: string; company_id?: string }) {
     if (!supabase) return { error: new Error("Supabase não configurado") };
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: opts?.full_name ?? null,
+          phone: opts?.phone ?? null,
+          company_id: opts?.company_id ?? null,
+        },
+      },
+    });
     if (error) return { error };
-
-    // Após confirmação de email/login, crie o perfil do próprio usuário
-    const authed = await supabase.auth.getUser();
-    if (authed.data.user) {
-      const companyId = opts?.company_id;
-      if (!companyId) {
-        // fallback: tenta resolver empresa atual via helper de company
-        try {
-          const { getCurrentCompany } = await import("../lib/supabase");
-          const { data: company } = await getCurrentCompany();
-          if (company?.id) {
-            const { error: insertError } = await supabase
-              .from("profiles")
-              .insert({
-                user_id: authed.data.user.id,
-                company_id: company.id,
-                role: "user",
-                is_active: true,
-                is_master: false,
-                full_name: opts?.full_name ?? null,
-                phone: opts?.phone ?? null,
-              });
-            if (insertError) {
-              // ignore silently; admin poderá ajustar depois
-            }
-          }
-        } catch (_) {}
-      } else {
-        const { error: insertError } = await supabase
-          .from("profiles")
-          .insert({
-            user_id: authed.data.user.id,
-            company_id: companyId,
-            role: "user",
-            is_active: true,
-            is_master: false,
-            full_name: opts?.full_name ?? null,
-            phone: opts?.phone ?? null,
-          });
-        if (insertError) {
-          // ignore silently; admin poderá ajustar depois
-        }
-      }
-    }
-
     return { data, error: null };
   }
 
   async function signOut() {
     if (!supabase) {
       // Limpa estado local mesmo sem cliente Supabase
-      setUser(null);
-      setProfile(null);
+      setSessionUser(null);
       setLoading(false);
+      setProfileRow(null);
       return { error: new Error("Supabase não configurado") };
     }
-    // marca como offline ao sair
-    try {
-      if (profile?.user_id) {
-        await supabase
-          .from("profiles")
-          .update({ presence_status: "offline", last_seen_at: new Date().toISOString() })
-          .eq("user_id", profile.user_id);
-      }
-    } catch {}
     const { error } = await supabase.auth.signOut();
     // Proativamente limpa estado local e encerra loading
-    setUser(null);
-    setProfile(null);
+    setSessionUser(null);
     setLoading(false);
+    setProfileRow(null);
     // Opcional: força avaliação da sessão após signOut
     try {
       await supabase.auth.getSession();
@@ -224,29 +216,44 @@ export function useSupabaseAuth() {
 
   async function listProfilesByCompany() {
     if (!supabase) return { data: [], error: new Error("Supabase não configurado") };
-    const query = supabase
-      .from("profiles")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const query = supabase.from("auth_users_view" as any).select("*").order("full_name", { ascending: true });
     const { data, error } = profile?.company_id
       ? await query.eq("company_id", profile.company_id)
       : await query;
-    return { data: data ?? [], error };
+    if (error) return { data: [], error };
+    const mapped = (data ?? []).map((row: any) => ({
+      user_id: row.id,
+      email: row.email,
+      full_name: row.full_name,
+      role: row.role ?? "user",
+      is_master: row.is_master ?? false,
+      is_active: row.is_active ?? true,
+      phone: row.phone ?? null,
+      last_sign_in_at: row.last_sign_in_at,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      company_id: row.company_id,
+    }));
+    return { data: mapped, error: null };
   }
 
-  async function updateProfile(userId: string, updates: Partial<ProfileRow>) {
+  async function updateProfile(userId: string, updates: Record<string, unknown>) {
     if (!supabase) return { error: new Error("Supabase não configurado") };
-    const { error } = await supabase
-      .from("profiles")
-      .update(updates)
-      .eq("user_id", userId);
-    return { error };
+    const payload = {
+      p_user_id: userId,
+      p_full_name: (updates.full_name as string | undefined) ?? null,
+      p_role: (updates.role as string | undefined) ?? null,
+      p_is_master: updates.is_master as boolean | null | undefined,
+      p_is_active: updates.is_active as boolean | null | undefined,
+    };
+    const { error } = await supabase.rpc("admin_update_user" as any, payload);
+    return { error: error ?? null };
   }
 
   return {
     user,
     profile,
-    loading,
+    loading: loading || profileLoading,
     isMaster,
     isAdmin,
     signIn,

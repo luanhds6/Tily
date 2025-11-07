@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth, Session as LegacySession } from "../hooks/useAuth";
 import { useSupabaseAuth } from "../hooks/useSupabaseAuth";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useTickets } from "../hooks/useTickets";
 import { Sidebar } from "./layout/Sidebar";
 import { DashboardView } from "./dashboard/DashboardView";
@@ -29,62 +29,99 @@ import { useAccessControl } from "@/hooks/useAccessControl";
 
 function AppWithNotifications() {
   const navigate = useNavigate();
+  const location = useLocation();
   // Supabase auth (fonte de verdade para sessão)
   const { user, profile, loading, isAdmin, isMaster, signOut } = useSupabaseAuth();
 
   // Hooks locais existentes (usuários, tickets, etc.)
   const { users, getAdminUsers, createUser, updateUser, deleteUser } = useAuth();
   const { tickets, createTicket, updateTicket, addMessage, assignTicket, resolveTicket, deleteTicket, markTicketOpenedByAuthor, markTicketReplyReadByAuthor } = useTickets();
-  const [view, setView] = useState("dashboard");
-  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  const [view, setView] = useState<string>(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("view") || "dashboard";
+  });
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("ticket") || null;
+  });
   const { addNotification } = useNotificationCenter();
   
   // Converte sessão Supabase para sessão legada esperada pelos componentes
-  const session: LegacySession | null = user
-    ? {
-        id: user.id,
-        name: profile?.full_name ?? user.email ?? "Usuário",
-        email: user.email ?? "",
-        role: profile?.is_master ? "master" : profile?.role === "admin" ? "admin" : "user",
-      }
-    : null;
+  const session: LegacySession | null = useMemo(() => {
+    if (!user) return null;
+    return {
+      id: user.id,
+      name: profile?.full_name ?? user.fullName ?? user.email ?? "Usuário",
+      email: user.email ?? "",
+      role: user.role,
+    };
+  }, [user, profile?.full_name]);
 
   const access = useAccessControl(session);
 
   // Usa a role efetiva vinda do access control para refletir corretamente na UI
-  const displaySession: LegacySession | null = session
-    ? {
-        ...session,
-        role:
-          access?.perms?.role === "master"
-            ? "master"
-            : access?.perms?.role === "admin"
-            ? "admin"
-            : session.role,
-      }
-    : null;
+  const displaySession: LegacySession | null = useMemo(() => {
+    if (!session) return null;
+    const effectiveRole = access?.perms?.role;
+    if (effectiveRole === "master" || effectiveRole === "admin") {
+      return { ...session, role: effectiveRole };
+    }
+    return session;
+  }, [session, access?.perms?.role]);
 
-  const handleViewChange = (newView: string, ticketId?: string) => {
+  const updateUrlState = useCallback((nextView: string, options?: { ticketId?: string | null }) => {
+    const params = new URLSearchParams(location.search);
+    params.set("view", nextView);
+    if (options?.ticketId) {
+      params.set("ticket", options.ticketId);
+    } else {
+      params.delete("ticket");
+    }
+    navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
+  }, [location.pathname, location.search, navigate]);
+
+  const handleViewChange = useCallback((newView: string, ticketId?: string) => {
     setView(newView);
-    if (ticketId) setSelectedTicketId(ticketId);
-  };
+    if (ticketId) {
+      setSelectedTicketId(ticketId);
+      updateUrlState(newView, { ticketId });
+    } else {
+      setSelectedTicketId(null);
+      updateUrlState(newView);
+    }
+  }, [updateUrlState]);
 
   const handleTicketClick = (ticketId: string) => {
     setSelectedTicketId(ticketId);
     setView("detail");
+    updateUrlState("detail", { ticketId });
   };
 
   const handleNewTicket = (data: any) => {
     if (!session) return;
     createTicket(session.id, session.name, data);
     setView("chamados");
+    setSelectedTicketId(null);
+    updateUrlState("chamados");
   };
 
   // Solicita permissão de notificação quando o usuário está logado
+  const hasRequestedNotifications = useRef(false);
+
   useEffect(() => {
-    if (session) {
-      requestNotificationPermission();
+    if (!session) {
+      hasRequestedNotifications.current = false;
+      return;
     }
+
+    if (hasRequestedNotifications.current) return;
+    if (typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "default") {
+        // Ainda dispara fora de um gesto do usuário, mas apenas uma vez por sessão para evitar loop de warnings.
+        requestNotificationPermission();
+      }
+    }
+    hasRequestedNotifications.current = true;
   }, [session]);
 
   // Assina novas mensagens e envia notificação se for resposta ao usuário
@@ -105,6 +142,23 @@ function AppWithNotifications() {
   const handleCreateUser = (data: { name: string; email: string; password: string; role: "user" | "admin" }) => {
     createUser({ ...data, active: true });
   };
+
+  // Sincroniza alterações no URL (ex: recarregar, edição manual)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const urlView = params.get("view") || "dashboard";
+    const urlTicket = params.get("ticket");
+
+    if (urlView !== view) {
+      setView(urlView);
+    }
+
+    if (urlTicket || selectedTicketId) {
+      if ((urlTicket ?? null) !== (selectedTicketId ?? null)) {
+        setSelectedTicketId(urlTicket ?? null);
+      }
+    }
+  }, [location.search]);
 
   // Proteção de rota: redireciona para /login quando não autenticado (Supabase)
   if (!loading && !session) {

@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { useEffect, useState } from "react";
 
 export type AccessPermissions = {
   role: "guest" | "user" | "admin" | "master";
@@ -29,64 +28,53 @@ export function useAccessControl(session: { id: string; role: "user" | "admin" |
     { loading: true, error: null, perms: defaultPerms },
   );
 
-  const isAdminLike = useMemo(() => session?.role === "admin" || session?.role === "master", [session?.role]);
-
   useEffect(() => {
-    let cancelled = false;
-    async function run() {
-      if (!session || !supabase) {
-        // Fallback local: assume padrão por papel
-        if (!session) {
-          setState({ loading: false, error: null, perms: defaultPerms });
-          return;
-        }
-        if (session.role === "master") {
-          setState({
-            loading: false,
-            error: null,
-            perms: {
-              role: "master",
-              can_manage_company: true,
-              permissions: Object.fromEntries(
-                Object.keys(defaultPerms.permissions).map((k) => [k, true]),
-              ),
-            },
-          });
-          return;
-        }
-        if (session.role === "admin") {
-          setState({
-            loading: false,
-            error: null,
-            perms: {
-              role: "admin",
-              can_manage_company: false,
-              permissions: Object.fromEntries(
-                Object.keys(defaultPerms.permissions).map((k) => [k, true]),
-              ),
-            },
-          });
-          return;
-        }
-        setState({ loading: false, error: null, perms: defaultPerms });
-        return;
-      }
-
-      try {
-        const { data, error } = await supabase.rpc("get_effective_permissions", { p_user_id: session.id });
-        if (error) throw error;
-        if (!data) {
-          setState({ loading: false, error: null, perms: defaultPerms });
-          return;
-        }
-        if (!cancelled) setState({ loading: false, error: null, perms: data as AccessPermissions });
-      } catch (err: any) {
-        if (!cancelled) setState({ loading: false, error: err.message ?? String(err), perms: defaultPerms });
-      }
+    if (!session) {
+      setState({ loading: false, error: null, perms: defaultPerms });
+      return;
     }
-    run();
-    return () => { cancelled = true; };
-  }, [session?.id, session?.role]);
+
+    const allowAll = Object.fromEntries(
+      Object.keys(defaultPerms.permissions).map((k) => [k, true]),
+    ) as Record<string, boolean>;
+
+    if (session.role === "master") {
+      setState({
+        loading: false,
+        error: null,
+        perms: {
+          role: "master",
+          can_manage_company: true,
+          permissions: allowAll,
+        },
+      });
+      return;
+    }
+
+    if (session.role === "admin") {
+      setState({
+        loading: false,
+        error: null,
+        perms: {
+          role: "admin",
+          can_manage_company: false,
+          permissions: {
+            ...allowAll,
+          },
+        },
+      });
+      return;
+    }
+
+    setState({
+      loading: false,
+      error: null,
+      perms: {
+        ...defaultPerms,
+        role: "user",
+      },
+    });
+  }, [session]);
 
   return state;
 }

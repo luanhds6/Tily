@@ -55,17 +55,21 @@ function saveJSON(key: string, data: any) {
 export function useTickets() {
   const [tickets, setTickets] = useState<Ticket[]>(() => loadJSON(LS_TICKETS, []));
   const [loadedFromSupabase, setLoadedFromSupabase] = useState(false);
+  const [supabaseUnavailable, setSupabaseUnavailable] = useState(false);
 
   // Carrega tickets do Supabase (se configurado)
   useEffect(() => {
     const loadFromSupabase = async () => {
-      if (!isSupabaseEnabled || !supabase) return;
+      if (!isSupabaseEnabled || !supabase || supabaseUnavailable) return;
       const { data: ticketRows, error: tErr } = await supabase
         .from("tickets")
         .select("*")
         .order("created_at", { ascending: false });
       if (tErr) {
-        console.error("Erro ao carregar tickets do Supabase:", tErr);
+        console.warn("Supabase indisponível para tickets, usando armazenamento local.", tErr);
+        if (tErr.code === "PGRST205" || (tErr as any).status === 404) {
+          setSupabaseUnavailable(true);
+        }
         return;
       }
 
@@ -119,11 +123,11 @@ export function useTickets() {
     };
 
     loadFromSupabase();
-  }, []);
+  }, [supabaseUnavailable]);
 
   // Assina inserções de mensagens no Supabase para manter estado sincronizado
   useEffect(() => {
-    if (!isSupabaseEnabled || !supabase) return;
+    if (!isSupabaseEnabled || !supabase || !loadedFromSupabase) return;
     const channel = supabase
       .channel("messages_sync_state")
       .on(
@@ -161,7 +165,7 @@ export function useTickets() {
         supabase.removeChannel(channel);
       } catch {}
     };
-  }, []);
+  }, [loadedFromSupabase]);
 
   // Mantém cache local quando não estiver usando Supabase
   useEffect(() => {
