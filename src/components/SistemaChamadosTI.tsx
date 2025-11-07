@@ -4,6 +4,7 @@ import { useSupabaseAuth } from "../hooks/useSupabaseAuth";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useTickets } from "../hooks/useTickets";
 import { Sidebar } from "./layout/Sidebar";
+import PageTransition from "./layout/PageTransition";
 import { DashboardView } from "./dashboard/DashboardView";
 import { AnalyticsView } from "./analytics/AnalyticsView";
 import { KnowledgeBaseView } from "./knowledge-base/KnowledgeBaseView";
@@ -203,61 +204,84 @@ function AppWithNotifications() {
       <main className="flex-1 lg:pt-0 pt-16 md:pr-20">
         {/* Sino de notificações global */}
         <NotificationBell />
-        {view === "dashboard" && access.perms.permissions["dashboard"] && (
-          <DashboardView tickets={tickets} session={session} agents={agents} onViewChange={handleViewChange} />
-        )}
-        {view === "chat" && access.perms.permissions["chat"] && <ChatView session={session} users={users} />}
-        {view === "chamados" && access.perms.permissions["tickets"] && (
-          <TicketsPage
-            session={session}
-            users={users}
-            tickets={tickets}
-            onTicketClick={handleTicketClick}
-            onCreateTicket={handleNewTicket}
-          />
-        )}
-        {view === "informativos" && access.perms.permissions["informativos"] && <InformativosView session={session} />}
-        {view === "links" && access.perms.permissions["quick_links"] && <QuickLinksView session={session} />}
-        {view === "detail" && selectedTicket && session && (
-          <TicketDetailView
-            ticket={selectedTicket}
-            session={session}
-            users={users}
-            agents={agents}
-            onBack={() => setView("chamados")}
-            onAddMessage={addMessage}
-            onUpdateStatus={updateTicket}
-            onAssignTicket={assignTicket}
-            onDeleteTicket={deleteTicket}
-            onMarkOpenedByAuthor={markTicketOpenedByAuthor}
-            onMarkReplyReadByAuthor={markTicketReplyReadByAuthor}
-          />
-        )}
-        {view === "new" && <NewTicketForm onSubmit={handleNewTicket} onCancel={() => setView("chamados")} />}
-        {view === "users" && session && isMaster && (
-          <ProfilesManagementView />
-        )}
-        {view === "analytics" && access.perms.permissions["analytics"] && <AnalyticsView tickets={tickets} agents={agents} />}
-        {view === "knowledge" && access.perms.permissions["knowledge"] && <KnowledgeBaseView isAdmin={isAdmin} />}
-        {view === "profile" && access.perms.permissions["profile"] && <ProfileView session={displaySession!} tickets={tickets} />}
-        {view === "settings" && (
-          (access.perms.role === "master" || access.perms.role === "admin") ? (
-            <AdminSettingsPage
-              session={displaySession!}
-              users={users}
-              tickets={tickets}
-              onCreateUser={handleCreateUser}
-              onUpdateUser={updateUser}
-              onDeleteUser={deleteUser}
-            />
-          ) : (
-            access.perms.permissions["settings"] ? <SettingsView /> : (
-              <div className="p-6">
-                <div className="text-sm text-muted-foreground">Sem acesso às configurações.</div>
-              </div>
-            )
-          )
-        )}
+
+        {(() => {
+          const pageKey = selectedTicketId ? `${view}:${selectedTicketId}` : view;
+          let content: React.ReactNode = null;
+
+          if (view === "dashboard" && access.perms.permissions["dashboard"]) {
+            content = (
+              <DashboardView tickets={tickets} session={session} agents={agents} onViewChange={handleViewChange} />
+            );
+          } else if (view === "chat" && access.perms.permissions["chat"]) {
+            content = <ChatView session={session} users={users} />;
+          } else if (view === "chamados" && access.perms.permissions["tickets"]) {
+            content = (
+              <TicketsPage
+                session={session}
+                users={users}
+                tickets={tickets}
+                onTicketClick={handleTicketClick}
+                onCreateTicket={handleNewTicket}
+              />
+            );
+          } else if (view === "informativos" && access.perms.permissions["informativos"]) {
+            content = <InformativosView session={session} />;
+          } else if (view === "links" && access.perms.permissions["quick_links"]) {
+            content = <QuickLinksView session={session} />;
+          } else if (view === "detail" && selectedTicket && session) {
+            content = (
+              <TicketDetailView
+                ticket={selectedTicket}
+                session={session}
+                users={users}
+                agents={agents}
+                onBack={() => setView("chamados")}
+                onAddMessage={addMessage}
+                onUpdateStatus={updateTicket}
+                onAssignTicket={assignTicket}
+                onDeleteTicket={deleteTicket}
+                onMarkOpenedByAuthor={markTicketOpenedByAuthor}
+                onMarkReplyReadByAuthor={markTicketReplyReadByAuthor}
+              />
+            );
+          } else if (view === "new") {
+            content = <NewTicketForm onSubmit={handleNewTicket} onCancel={() => setView("chamados")} />;
+          } else if (view === "users" && session && isMaster) {
+            content = <ProfilesManagementView />;
+          } else if (view === "analytics" && access.perms.permissions["analytics"]) {
+            content = <AnalyticsView tickets={tickets} agents={agents} />;
+          } else if (view === "knowledge" && access.perms.permissions["knowledge"]) {
+            content = <KnowledgeBaseView isAdmin={isAdmin} />;
+          } else if (view === "profile" && access.perms.permissions["profile"]) {
+            content = <ProfileView session={displaySession!} tickets={tickets} />;
+          } else if (view === "settings") {
+            content = (
+              (access.perms.role === "master" || access.perms.role === "admin") ? (
+                <AdminSettingsPage
+                  session={displaySession!}
+                  users={users}
+                  tickets={tickets}
+                  onCreateUser={handleCreateUser}
+                  onUpdateUser={updateUser}
+                  onDeleteUser={deleteUser}
+                />
+              ) : (
+                access.perms.permissions["settings"] ? <SettingsView /> : (
+                  <div className="p-6">
+                    <div className="text-sm text-muted-foreground">Sem acesso às configurações.</div>
+                  </div>
+                )
+              )
+            );
+          }
+
+          return (
+            <PageTransition viewKey={pageKey}>
+              {content}
+            </PageTransition>
+          );
+        })()}
       </main>
       {/* Chat flutuante disponível globalmente */}
       <ChatFloating session={session} users={users} />

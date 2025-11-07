@@ -189,20 +189,24 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-sidebar border-b border-sidebar-border">
         <div className="flex items-center justify-between p-4">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMobileOpen(!mobileOpen)}
+              className="p-2 hover:bg-sidebar-accent rounded-lg transition-colors"
+              aria-label="Alternar menu"
+              title="Alternar menu"
+            >
+              {mobileOpen ? (
+                <X className="w-6 h-6 text-sidebar-foreground" />
+              ) : (
+                <Menu className="w-6 h-6 text-sidebar-foreground" />
+              )}
+            </button>
             <Ticket className="w-6 h-6 text-primary" />
             <h1 className="text-lg font-bold text-sidebar-foreground">Chamados TI</h1>
           </div>
-          <button
-            onClick={() => setMobileOpen(!mobileOpen)}
-            className="p-2 hover:bg-sidebar-accent rounded-lg transition-colors"
-          >
-            {mobileOpen ? (
-              <X className="w-6 h-6 text-sidebar-foreground" />
-            ) : (
-              <Menu className="w-6 h-6 text-sidebar-foreground" />
-            )}
-          </button>
+          {/* Espaço reservado para ações à direita (vazio para evitar conflito com sino) */}
+          <div className="w-6" />
         </div>
       </div>
 
