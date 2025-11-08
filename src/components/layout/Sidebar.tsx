@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { Home, Ticket, Users, BarChart3, BookOpen, Settings, LogOut, Menu, X, UserCircle, MessageSquare, AlertCircle, Link as LinkIcon, Globe, FileText, Mail, Bookmark, ChevronUp, ChevronDown } from "lucide-react";
+import { Home, Ticket, Users, BarChart3, BookOpen, Settings, LogOut, Menu, X, UserCircle, MessageSquare, AlertCircle, Link as LinkIcon, Globe, FileText, Mail, Bookmark, ChevronUp, ChevronDown, Video } from "lucide-react";
 import { Session } from "../../hooks/useAuth";
 import { useAccessControl } from "@/hooks/useAccessControl";
+import BrandLogo from "@/components/ui/BrandLogo";
 
 interface SidebarProps {
   session: Session | null;
@@ -52,6 +53,7 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
     { id: "dashboard", label: "Dashboard", icon: Home, show: !!perms["dashboard"] },
     { id: "chamados", label: "Chamados", icon: Ticket, show: !!perms["tickets"] },
     { id: "chat", label: "Chat", icon: MessageSquare, show: !!perms["chat"] },
+    { id: "meetings", label: "Reuniões", icon: Video, show: !!perms["meetings"] },
     { id: "informativos", label: "Informativos", icon: AlertCircle, show: !!perms["informativos"] },
     { id: "links", label: "Links Úteis", icon: LinkIcon, show: !!perms["quick_links"] },
     { id: "analytics", label: "Relatórios", icon: BarChart3, show: isAdmin || !!perms["analytics"] },
@@ -75,9 +77,7 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
     <>
       <div className="p-6 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-sidebar-primary rounded-lg flex items-center justify-center">
-            <Ticket className="w-6 h-6 text-sidebar-primary-foreground" />
-          </div>
+          <BrandLogo size={36} shape="circle" />
           <div>
             <h1 className="text-lg font-bold">Chamados TI</h1>
             {session && <p className="text-xs text-sidebar-foreground/60 truncate">{session.name}</p>}
@@ -202,7 +202,7 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
                 <Menu className="w-6 h-6 text-sidebar-foreground" />
               )}
             </button>
-            <Ticket className="w-6 h-6 text-primary" />
+            <BrandLogo size={28} shape="circle" />
             <h1 className="text-lg font-bold text-sidebar-foreground">Chamados TI</h1>
           </div>
           {/* Espaço reservado para ações à direita (vazio para evitar conflito com sino) */}

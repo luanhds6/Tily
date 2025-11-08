@@ -13,6 +13,7 @@ const defaultPerms: AccessPermissions = {
     dashboard: false,
     tickets: true,
     chat: false,
+    meetings: false,
     profile: true,
     settings: true,
     users_management: false,

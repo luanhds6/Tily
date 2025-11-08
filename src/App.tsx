@@ -8,6 +8,7 @@ import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import SeedMasterPage from "./pages/SeedMaster";
 import SeedTestUsersPage from "./pages/SeedTestUsers";
+import SistemaChamadosTI from "./components/SistemaChamadosTI";
 
 const queryClient = new QueryClient();
 
@@ -20,6 +21,8 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
+          {/* Área interna do sistema */}
+          <Route path="/app" element={<SistemaChamadosTI />} />
           {import.meta.env.DEV && <Route path="/seed" element={<SeedMasterPage />} />}
           {import.meta.env.DEV && <Route path="/seed-test-users" element={<SeedTestUsersPage />} />}
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

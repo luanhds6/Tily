@@ -8,6 +8,7 @@ import PageTransition from "./layout/PageTransition";
 import { DashboardView } from "./dashboard/DashboardView";
 import { AnalyticsView } from "./analytics/AnalyticsView";
 import { KnowledgeBaseView } from "./knowledge-base/KnowledgeBaseView";
+import MeetingsPage from "./meetings/MeetingsPage";
 import { ProfileView } from "./profile/ProfileView";
 import { SettingsView } from "./settings/SettingsView";
 import AdminSettingsPage from "./settings/AdminSettingsPage";
@@ -21,6 +22,7 @@ import { Ticket, User, Mail } from "lucide-react";
 import { ChatView } from "./chat/ChatView";
 import { ChatFloating } from "./chat/ChatFloating";
 import { useRealtimeMessages } from "../hooks/useSupabaseRealtime";
+import { isSupabaseEnabled } from "@/lib/supabase";
 import { requestNotificationPermission, notify } from "../hooks/useNotifications";
 import { InformativosView } from "./informativos/InformativosView";
 import { NotificationCenterProvider, useNotificationCenter } from "@/hooks/useNotificationCenter";
@@ -32,7 +34,7 @@ function AppWithNotifications() {
   const navigate = useNavigate();
   const location = useLocation();
   // Supabase auth (fonte de verdade para sessão)
-  const { user, profile, loading, isAdmin, isMaster, signOut } = useSupabaseAuth();
+  const { user, profile, loading, isAdmin, isMaster, signOut, listProfilesByCompany } = useSupabaseAuth();
 
   // Hooks locais existentes (usuários, tickets, etc.)
   const { users, getAdminUsers, createUser, updateUser, deleteUser } = useAuth();
@@ -49,16 +51,61 @@ function AppWithNotifications() {
   
   // Converte sessão Supabase para sessão legada esperada pelos componentes
   const session: LegacySession | null = useMemo(() => {
+    if (!isSupabaseEnabled) {
+      // Modo local (sem Supabase): fornece sessão master para navegação e testes
+      return { id: "local_master", name: "Usuário Local", email: "local@dev", role: "master" } as LegacySession;
+    }
     if (!user) return null;
     return {
       id: user.id,
-      name: profile?.full_name ?? user.fullName ?? user.email ?? "Usuário",
+      name: profile?.full_name ?? user.fullName ?? (user.email ?? "Usuário"),
       email: user.email ?? "",
       role: user.role,
     };
   }, [user, profile?.full_name]);
 
   const access = useAccessControl(session);
+
+  // Admins via Supabase (sincroniza ranking com administradores cadastrados)
+  const [supabaseAgents, setSupabaseAgents] = useState<User[] | null>(null);
+  useEffect(() => {
+    let active = true;
+    async function loadAdmins() {
+      // Usa Supabase apenas quando habilitado
+      if (!isSupabaseEnabled) {
+        setSupabaseAgents(null);
+        return;
+      }
+      try {
+        const { data, error } = await listProfilesByCompany();
+        if (error) {
+          console.warn("Falha ao listar perfis do Supabase:", error.message);
+          if (active) setSupabaseAgents(null);
+          return;
+        }
+        const admins = (data ?? []).filter((row: any) => (row.role === "admin" || row.is_master === true) && row.is_active !== false);
+        const mapped: User[] = admins.map((row: any) => ({
+          id: row.user_id,
+          name: (row.full_name as string | null) ?? (row.email as string | null) ?? row.user_id,
+          email: (row.email as string | null) ?? "",
+          password: "",
+          role: row.is_master ? "master" : "admin",
+          active: row.is_active ?? true,
+          avatar: undefined,
+          department: undefined,
+        }));
+        if (active) setSupabaseAgents(mapped);
+      } catch (e) {
+        console.error("Erro inesperado ao carregar admins do Supabase:", e);
+        if (active) setSupabaseAgents(null);
+      }
+    }
+    loadAdmins();
+    return () => {
+      active = false;
+    };
+    // Recarrega quando usuário ou empresa do perfil mudar
+  }, [user?.id, profile?.company_id, isSupabaseEnabled]);
 
   // Usa a role efetiva vinda do access control para refletir corretamente na UI
   const displaySession: LegacySession | null = useMemo(() => {
@@ -162,7 +209,7 @@ function AppWithNotifications() {
   }, [location.search]);
 
   // Proteção de rota: redireciona para /login quando não autenticado (Supabase)
-  if (!loading && !session) {
+  if (isSupabaseEnabled && !loading && !session) {
     return <Navigate to="/login" replace />;
   }
   if (loading) {
@@ -182,7 +229,8 @@ function AppWithNotifications() {
     );
   }
 
-  const agents = getAdminUsers();
+  // Usa admins do Supabase quando disponíveis; senão, fallback para admins locais
+  const agents = isSupabaseEnabled ? (supabaseAgents ?? []) : getAdminUsers();
   const myTickets = tickets.filter(t => t.authorId === session?.id);
   const selectedTicket = selectedTicketId ? tickets.find(t => t.id === selectedTicketId) : null;
 
@@ -253,6 +301,8 @@ function AppWithNotifications() {
             content = <AnalyticsView tickets={tickets} agents={agents} />;
           } else if (view === "knowledge" && access.perms.permissions["knowledge"]) {
             content = <KnowledgeBaseView isAdmin={isAdmin} />;
+          } else if (view === "meetings" && access.perms.permissions["meetings"]) {
+            content = <MeetingsPage session={session} />;
           } else if (view === "profile" && access.perms.permissions["profile"]) {
             content = <ProfileView session={displaySession!} tickets={tickets} />;
           } else if (view === "settings") {
