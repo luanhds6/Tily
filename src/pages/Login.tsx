@@ -53,9 +53,11 @@ export default function Login() {
 
   return (
     <div className="min-h-screen relative overflow-hidden flex items-center justify-center">
-      {/* Botão Voltar para a página de apresentação */}
+      {/* Marca Tily fixa: clicável, leva à página de apresentação enquanto não logado */}
       <div className="absolute top-4 left-4 z-10">
-        <Button variant="outline" className="rounded-full shadow-sm" onClick={() => navigate("/")}>← Voltar</Button>
+        <button onClick={() => navigate("/")} aria-label="Voltar para apresentação" className="focus:outline-none">
+          <BrandLogo variant="wordmark" size={36} />
+        </button>
       </div>
       {/* Fundo com imagem translúcida + gradiente suave */}
       <div className="absolute inset-0">

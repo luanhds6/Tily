@@ -2,13 +2,31 @@ import React, { useState } from "react";
 
 interface BrandLogoProps {
   className?: string;
-  size?: number; // base size for image/svg
-  shape?: "rounded" | "circle"; // rounded corners or fully circular
+  size?: number; // base size for image/svg or font size for wordmark
+  shape?: "rounded" | "circle"; // rounded corners or fully circular (for logo variant)
+  variant?: "logo" | "wordmark"; // wordmark exibe apenas as letras, sem bordas
+  tone?: "default" | "contrast"; // controla a paleta para melhor contraste em fundos escuros
 }
 
-export default function BrandLogo({ className = "", size = 80, shape = "rounded" }: BrandLogoProps) {
+export default function BrandLogo({ className = "", size = 80, shape = "rounded", variant = "logo", tone = "default" }: BrandLogoProps) {
   const [error, setError] = useState(false);
   const imgSize = `${size}px`;
+
+  if (variant === "wordmark") {
+    // Apenas letras, sem borda, com gradiente e tamanho configurável
+    const gradientClasses =
+      tone === "contrast"
+        ? "bg-gradient-to-r from-white via-sky-200 to-emerald-200 drop-shadow-sm"
+        : "bg-gradient-to-r from-blue-900 via-blue-600 to-emerald-500";
+    return (
+      <span
+        className={`select-none font-extrabold tracking-tight ${gradientClasses} bg-clip-text text-transparent ${className}`}
+        style={{ fontSize: `${size}px`, lineHeight: 1.12, display: "inline-block", transform: "translateY(-3px)" }}
+      >
+        Tily
+      </span>
+    );
+  }
 
   return (
     <div

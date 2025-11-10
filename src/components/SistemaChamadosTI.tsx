@@ -34,7 +34,7 @@ function AppWithNotifications() {
   const navigate = useNavigate();
   const location = useLocation();
   // Supabase auth (fonte de verdade para sessão)
-  const { user, profile, loading, isAdmin, isMaster, signOut, listProfilesByCompany } = useSupabaseAuth();
+  const { user, profile, loading, isAdmin, isMaster, signOut, listProfilesByCompany, listAllUsers } = useSupabaseAuth();
 
   // Hooks locais existentes (usuários, tickets, etc.)
   const { users, getAdminUsers, createUser, updateUser, deleteUser } = useAuth();
@@ -106,6 +106,39 @@ function AppWithNotifications() {
     };
     // Recarrega quando usuário ou empresa do perfil mudar
   }, [user?.id, profile?.company_id, isSupabaseEnabled]);
+
+  // Usuários para o Chat via Supabase (todos os cadastrados)
+  const [chatUsers, setChatUsers] = useState<Array<{ id: string; name: string; role: string; avatar?: string }>>([]);
+  useEffect(() => {
+    let active = true;
+    async function loadChatUsers() {
+      if (!isSupabaseEnabled) {
+        // Fallback para usuários locais quando Supabase não está habilitado
+        setChatUsers(users.map(u => ({ id: u.id, name: u.name, role: u.role, avatar: u.avatar })));
+        return;
+      }
+      try {
+        const { data, error } = await listAllUsers();
+        if (error) {
+          console.warn("Falha ao listar todos usuários do Supabase:", error.message);
+          if (active) setChatUsers([]);
+          return;
+        }
+        const mapped = (data ?? []).map((row: any) => ({
+          id: row.user_id,
+          name: (row.full_name as string | null) ?? (row.email as string | null) ?? row.user_id,
+          role: row.is_master ? "master" : row.role ?? "user",
+          avatar: undefined,
+        }));
+        if (active) setChatUsers(mapped);
+      } catch (e) {
+        console.error("Erro inesperado ao carregar usuários do chat:", e);
+        if (active) setChatUsers([]);
+      }
+    }
+    loadChatUsers();
+    return () => { active = false; };
+  }, [isSupabaseEnabled, user?.id]);
 
   // Usa a role efetiva vinda do access control para refletir corretamente na UI
   const displaySession: LegacySession | null = useMemo(() => {
@@ -262,7 +295,7 @@ function AppWithNotifications() {
               <DashboardView tickets={tickets} session={session} agents={agents} onViewChange={handleViewChange} />
             );
           } else if (view === "chat" && access.perms.permissions["chat"]) {
-            content = <ChatView session={session} users={users} />;
+            content = <ChatView session={session} users={isSupabaseEnabled ? chatUsers : users} />;
           } else if (view === "chamados" && access.perms.permissions["tickets"]) {
             content = (
               <TicketsPage

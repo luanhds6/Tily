@@ -166,6 +166,7 @@ export type Database = {
           company_id: string
           created_at: string
           full_name: string | null
+          avatar_url: string | null
           is_active: boolean
           is_master: boolean
           presence_status: "online" | "offline" | "away"
@@ -179,6 +180,7 @@ export type Database = {
           company_id: string
           created_at?: string
           full_name?: string | null
+          avatar_url?: string | null
           is_active?: boolean
           is_master?: boolean
           presence_status?: "online" | "offline" | "away"
@@ -192,6 +194,7 @@ export type Database = {
           company_id?: string
           created_at?: string
           full_name?: string | null
+          avatar_url?: string | null
           is_active?: boolean
           is_master?: boolean
           presence_status?: "online" | "offline" | "away"

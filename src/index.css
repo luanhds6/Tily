@@ -113,3 +113,5 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* sidebar-gradient removido; usando bg-sidebar padrão */

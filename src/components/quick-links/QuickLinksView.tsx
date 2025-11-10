@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { Session } from "@/hooks/useAuth";
+import { supabase, isSupabaseEnabled, getCurrentCompany } from "@/lib/supabase";
 import {
   Link as LinkIcon,
   Globe,
@@ -47,7 +48,7 @@ const ICON_OPTIONS: { key: keyof typeof ICONS_MAP; label: string }[] = [
   { key: "bookmark", label: "Favorito" },
 ];
 
-function loadLinks(): QuickLink[] {
+function loadLinksLocal(): QuickLink[] {
   try {
     const raw = localStorage.getItem(LS_QUICK_LINKS);
     return raw ? (JSON.parse(raw) as QuickLink[]) : [];
@@ -56,8 +57,10 @@ function loadLinks(): QuickLink[] {
   }
 }
 
-function saveLinks(links: QuickLink[]) {
-  localStorage.setItem(LS_QUICK_LINKS, JSON.stringify(links));
+function saveLinksLocal(links: QuickLink[]) {
+  try {
+    localStorage.setItem(LS_QUICK_LINKS, JSON.stringify(links));
+  } catch {}
 }
 
 export function QuickLinksView({ session }: { session: Session | null }) {
@@ -73,33 +76,120 @@ export function QuickLinksView({ session }: { session: Session | null }) {
   const [iconKey, setIconKey] = useState<keyof typeof ICONS_MAP>("link");
 
   useEffect(() => {
-    setLinks(loadLinks());
+    let active = true;
+    async function load() {
+      // Se Supabase estiver habilitado, carrega do banco por empresa
+      if (isSupabaseEnabled && supabase) {
+        try {
+          const { data: company, error: compErr } = await getCurrentCompany();
+          if (compErr || !company) {
+            setLinks(loadLinksLocal());
+            return;
+          }
+          const { data, error } = await (supabase as any)
+            .from("quick_links")
+            .select("id,title,url,icon,created_at")
+            .eq("company_id", company.id)
+            .order("created_at", { ascending: false });
+          if (error) {
+            setLinks(loadLinksLocal());
+            return;
+          }
+          const mapped: QuickLink[] = (data ?? []).map((row: any) => ({
+            id: row.id,
+            title: row.title,
+            url: row.url,
+            icon: row.icon || "link",
+          }));
+          if (active) {
+            setLinks(mapped);
+            // cache local para fallback rápido
+            saveLinksLocal(mapped);
+          }
+          return;
+        } catch {
+          setLinks(loadLinksLocal());
+          return;
+        }
+      }
+      // Fallback: localStorage
+      setLinks(loadLinksLocal());
+    }
+    load();
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const handleAdd = (e: React.FormEvent) => {
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !url.trim()) {
       toast({ title: "Preencha nome e URL", description: "Campos obrigatórios", variant: "default" });
       return;
     }
-    const newLink: QuickLink = {
-      id: Math.random().toString(36).slice(2),
+    const baseNew = {
       title: title.trim(),
       url: url.trim(),
       icon: iconKey,
     };
+
+    // Supabase: salvar no banco
+    if (isSupabaseEnabled && supabase) {
+      try {
+        const { data: company } = await getCurrentCompany();
+        if (company?.id) {
+          const { data, error } = await (supabase as any)
+            .from("quick_links")
+            .insert({ ...baseNew, company_id: company.id })
+            .select("id,title,url,icon,created_at")
+            .maybeSingle();
+          if (error) throw error;
+          const newLink: QuickLink = {
+            id: data.id,
+            title: data.title,
+            url: data.url,
+            icon: data.icon || "link",
+          };
+          const next = [newLink, ...links];
+          setLinks(next);
+          saveLinksLocal(next);
+          setTitle("");
+          setUrl("");
+          toast({ title: "Link adicionado", description: newLink.title });
+          return;
+        }
+      } catch (err: any) {
+        toast({ title: "Falha ao salvar no Supabase", description: err?.message ?? "Erro inesperado" });
+      }
+    }
+
+    // Fallback local
+    const newLink: QuickLink = { id: Math.random().toString(36).slice(2), ...baseNew };
     const next = [newLink, ...links];
     setLinks(next);
-    saveLinks(next);
+    saveLinksLocal(next);
     setTitle("");
     setUrl("");
     toast({ title: "Link adicionado", description: newLink.title });
   };
 
-  const handleRemove = (id: string) => {
+  const handleRemove = async (id: string) => {
+    // Supabase: remover do banco
+    if (isSupabaseEnabled && supabase) {
+      try {
+        const { error } = await (supabase as any)
+          .from("quick_links")
+          .delete()
+          .eq("id", id);
+        if (error) throw error;
+      } catch (err: any) {
+        toast({ title: "Falha ao remover no Supabase", description: err?.message ?? "Erro inesperado" });
+        return;
+      }
+    }
     const next = links.filter((l) => l.id !== id);
     setLinks(next);
-    saveLinks(next);
+    saveLinksLocal(next);
     toast({ title: "Link removido" });
   };
 

@@ -21,11 +21,22 @@ type LightweightProfile = {
   is_active: boolean;
 };
 
+// Normaliza strings de papéis vindos do banco para "user" | "admin" | "master"
+function normalizeRoleString(raw: string | null | undefined): SessionRole {
+  const v = (raw || "").toString().trim().toLowerCase();
+  if (!v) return "user";
+  // Mapeamentos comuns
+  if (["master", "master_admin", "super_admin", "owner", "root", "superuser"].includes(v)) return "master";
+  if (["admin", "administrator", "manager", "moderator"].includes(v)) return "admin";
+  return "user";
+}
+
 function deriveRole(user: User | null, profile: ProfileRow | null): SessionRole {
   if (profile) {
     if (profile.is_master) return "master";
-    if (profile.role === "master") return "master";
-    if (profile.role === "admin") return "admin";
+    const normalized = normalizeRoleString((profile as any).role as string | null | undefined);
+    if (normalized === "master") return "master";
+    if (normalized === "admin") return "admin";
   }
   if (!user) return "user";
   const appMeta = user.app_metadata as Record<string, unknown> | undefined;
@@ -35,10 +46,10 @@ function deriveRole(user: User | null, profile: ProfileRow | null): SessionRole 
   if (appMeta?.is_master === true || userMeta?.is_master === true || appMeta?.is_super_admin === true) {
     return "master";
   }
-  if (appRole === "master" || metaRole === "master") {
+  if (normalizeRoleString(appRole) === "master" || normalizeRoleString(metaRole) === "master") {
     return "master";
   }
-  if (appRole === "admin" || metaRole === "admin") {
+  if (normalizeRoleString(appRole) === "admin" || normalizeRoleString(metaRole) === "admin") {
     return "admin";
   }
   return "user";
@@ -112,8 +123,45 @@ export function useSupabaseAuth() {
         .maybeSingle();
       if (error) {
         console.error("Falha ao carregar perfil do Supabase:", error.message);
-        setProfileRow(null);
-        return;
+        // Fallback: tentar carregar da view de usuários se RLS impedir SELECT no profiles
+        try {
+          const { data: vdata, error: verror } = await (supabase as any)
+            .from("auth_users_view")
+            .select("id,full_name,role,is_master,is_active,company_id")
+            .eq("id", userId)
+            .maybeSingle();
+          if (verror) {
+            console.warn("Falha ao carregar auth_users_view:", verror.message);
+            setProfileRow(null);
+            return;
+          }
+          if (vdata) {
+            const normalizedRole = normalizeRoleString(vdata.role);
+            const pseudoProfile = {
+              user_id: vdata.id,
+              full_name: (vdata.full_name as string | null) ?? null,
+              role: normalizedRole,
+              is_master: vdata.is_master === true || normalizedRole === "master",
+              is_active: vdata.is_active !== false,
+              company_id: vdata.company_id ?? null,
+              // Campos opcionais preenchidos com defaults para compatibilidade
+              avatar_url: null,
+              phone: null,
+              presence_status: "online",
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              last_seen_at: new Date().toISOString(),
+            } as unknown as ProfileRow;
+            setProfileRow(pseudoProfile);
+            return;
+          }
+          setProfileRow(null);
+          return;
+        } catch (fallbackErr) {
+          console.error("Erro inesperado no fallback de perfil:", fallbackErr);
+          setProfileRow(null);
+          return;
+        }
       }
       setProfileRow(data ?? null);
     } finally {
@@ -225,8 +273,32 @@ export function useSupabaseAuth() {
       user_id: row.id,
       email: row.email,
       full_name: row.full_name,
-      role: row.role ?? "user",
-      is_master: row.is_master ?? false,
+      role: normalizeRoleString(row.role ?? "user"),
+      is_master: (row.is_master ?? false) || normalizeRoleString(row.role) === "master",
+      is_active: row.is_active ?? true,
+      phone: row.phone ?? null,
+      last_sign_in_at: row.last_sign_in_at,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      company_id: row.company_id,
+    }));
+    return { data: mapped, error: null };
+  }
+
+  // Lista todos os usuários do sistema (sem filtro por empresa)
+  async function listAllUsers() {
+    if (!supabase) return { data: [], error: new Error("Supabase não configurado") };
+    const { data, error } = await (supabase as any)
+      .from("auth_users_view")
+      .select("*")
+      .order("full_name", { ascending: true });
+    if (error) return { data: [], error };
+    const mapped = (data ?? []).map((row: any) => ({
+      user_id: row.id,
+      email: row.email,
+      full_name: row.full_name,
+      role: normalizeRoleString(row.role ?? "user"),
+      is_master: (row.is_master ?? false) || normalizeRoleString(row.role) === "master",
       is_active: row.is_active ?? true,
       phone: row.phone ?? null,
       last_sign_in_at: row.last_sign_in_at,
@@ -250,6 +322,23 @@ export function useSupabaseAuth() {
     return { error: error ?? null };
   }
 
+  // Força recarregar o usuário da sessão (após updateUser de metadados)
+  async function refreshAuthUser() {
+    if (!supabase) return { error: new Error("Supabase não configurado") };
+    const { data, error } = await supabase.auth.getSession();
+    if (!error) {
+      setSessionUser(data.session?.user ?? null);
+    }
+    return { error };
+  }
+
+  // Força recarregar o profile.row a partir do user_id atual
+  async function reloadProfile() {
+    if (!sessionUser || !supabase) return { error: new Error("Supabase não configurado") };
+    await loadProfile(sessionUser.id);
+    return { error: null };
+  }
+
   return {
     user,
     profile,
@@ -261,6 +350,9 @@ export function useSupabaseAuth() {
     signOut,
     sendPasswordReset,
     listProfilesByCompany,
+    listAllUsers,
     updateProfile,
+    refreshAuthUser,
+    reloadProfile,
   };
 }

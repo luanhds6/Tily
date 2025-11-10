@@ -3,6 +3,7 @@ import { Home, Ticket, Users, BarChart3, BookOpen, Settings, LogOut, Menu, X, Us
 import { Session } from "../../hooks/useAuth";
 import { useAccessControl } from "@/hooks/useAccessControl";
 import BrandLogo from "@/components/ui/BrandLogo";
+import { supabase, isSupabaseEnabled, getCurrentCompany } from "@/lib/supabase";
 
 interface SidebarProps {
   session: Session | null;
@@ -40,12 +41,42 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
   const [quickLinks, setQuickLinks] = useState<QuickLink[]>([]);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(LS_QUICK_LINKS);
-      setQuickLinks(raw ? (JSON.parse(raw) as QuickLink[]) : []);
-    } catch {
-      setQuickLinks([]);
+    let active = true;
+    async function load() {
+      // Quando Supabase habilitado, carregar da tabela quick_links por empresa
+      if (isSupabaseEnabled && supabase) {
+        try {
+          const { data: company } = await getCurrentCompany();
+          if (company?.id) {
+            const { data, error } = await (supabase as any)
+              .from("quick_links")
+              .select("id,title,url,icon,created_at")
+              .eq("company_id", company.id)
+              .order("created_at", { ascending: false });
+            if (!error && active) {
+              const mapped: QuickLink[] = (data ?? []).map((row: any) => ({
+                id: row.id,
+                title: row.title,
+                url: row.url,
+                icon: row.icon || "link",
+              }));
+              setQuickLinks(mapped);
+              try { localStorage.setItem(LS_QUICK_LINKS, JSON.stringify(mapped)); } catch {}
+              return;
+            }
+          }
+        } catch {}
+      }
+      // Fallback: localStorage
+      try {
+        const raw = localStorage.getItem(LS_QUICK_LINKS);
+        setQuickLinks(raw ? (JSON.parse(raw) as QuickLink[]) : []);
+      } catch {
+        setQuickLinks([]);
+      }
     }
+    load();
+    return () => { active = false; };
   }, []);
 
   const perms = access?.perms?.permissions || {} as Record<string, boolean>;
@@ -76,15 +107,12 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
   const SidebarContent = () => (
     <>
       <div className="p-6 border-b border-sidebar-border">
-        <div className="flex items-center gap-3">
-          <BrandLogo size={36} shape="circle" />
-          <div>
-            <h1 className="text-lg font-bold">Chamados TI</h1>
-            {session && <p className="text-xs text-sidebar-foreground/60 truncate">{session.name}</p>}
-          </div>
+        <div className="flex flex-col items-center text-center gap-1">
+          <BrandLogo variant="wordmark" size={34} tone="contrast" />
+          {session && <p className="text-xs text-sidebar-foreground/70 truncate">{session.name}</p>}
         </div>
         {session && (
-          <div className="mt-3">
+          <div className="mt-2 flex justify-center">
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
               session.role === "master" ? "bg-warning/10 text-warning" : 
               session.role === "admin" ? "bg-primary/10 text-primary" : 
@@ -119,40 +147,42 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
                 )}
               </button>
               {item.id === "links" && linksOpen && (
-                <ul className="mt-1 ml-8 space-y-1">
-                  {quickLinks.length === 0 && (
-                    <li className="text-xs text-sidebar-foreground/60 px-4">Nenhum link cadastrado</li>
-                  )}
-                  {quickLinks.map((l) => {
-                    const IconComp = ICONS_MAP[(l.icon as keyof typeof ICONS_MAP) || "link"];
-                    return (
-                      <li key={l.id}>
-                        <a
-                          href={l.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="w-full flex items-center gap-2 px-4 py-2 rounded-md transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-                          title={l.title}
-                        >
-                          <IconComp className="w-4 h-4 flex-shrink-0" />
-                          <span className="truncate text-sm">{l.title}</span>
-                        </a>
-                      </li>
-                    );
-                  })}
+                <div className="mt-2 ml-4 mr-2 p-3 rounded-xl border border-white/50 bg-transparent shadow-soft min-h-[120px] max-h-[260px] overflow-y-auto">
                   {isAdmin && (
-                    <li>
+                    <div className="sticky top-0 pb-2">
                       <button
                         onClick={() => onViewChange("links")}
-                        className="w-full flex items-center gap-2 px-4 py-2 rounded-md text-xs bg-sidebar-accent/30 hover:bg-sidebar-accent/50"
+                        className="w-full flex items-center gap-2 px-4 py-2.5 rounded-md text-xs bg-white/10 hover:bg-white/20"
                         title="Gerenciar links"
                       >
                         <Settings className="w-4 h-4" />
                         <span>Gerenciar links</span>
                       </button>
-                    </li>
+                    </div>
                   )}
-                </ul>
+                  <ul className="space-y-1">
+                    {quickLinks.length === 0 && (
+                      <li className="text-xs text-sidebar-foreground/60 px-3 py-1.5">Nenhum link cadastrado</li>
+                    )}
+                    {quickLinks.map((l) => {
+                      const IconComp = ICONS_MAP[(l.icon as keyof typeof ICONS_MAP) || "link"];
+                      return (
+                        <li key={l.id}>
+                          <a
+                            href={l.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full flex items-center gap-2 px-4 py-2.5 rounded-md transition-colors hover:bg-white/10 hover:text-sidebar-foreground"
+                            title={l.title}
+                          >
+                            <IconComp className="w-4 h-4 flex-shrink-0" />
+                            <span className="truncate text-sm">{l.title}</span>
+                          </a>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
               )}
             </li>
           ))}
@@ -202,8 +232,10 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
                 <Menu className="w-6 h-6 text-sidebar-foreground" />
               )}
             </button>
-            <BrandLogo size={28} shape="circle" />
-            <h1 className="text-lg font-bold text-sidebar-foreground">Chamados TI</h1>
+            <div className="leading-tight">
+              <BrandLogo variant="wordmark" size={26} tone="contrast" />
+              {session && <p className="text-[11px] text-sidebar-foreground/70 truncate text-center">{session.name}</p>}
+            </div>
           </div>
           {/* Espaço reservado para ações à direita (vazio para evitar conflito com sino) */}
           <div className="w-6" />

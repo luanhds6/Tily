@@ -25,10 +25,10 @@ export default function Index() {
       <header className="sticky top-0 z-20 bg-white/70 backdrop-blur border-b border-border">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <BrandLogo size={44} />
-            <span className="text-xl font-bold">Tily</span>
+            {/* Wordmark sem bordas, apenas o nome ampliado */}
+            <BrandLogo variant="wordmark" size={56} />
           </div>
-          <Button onClick={handleLogin} className="rounded-full">Login</Button>
+          <Button onClick={handleLogin} className="rounded-full h-10 px-6 text-base">Login</Button>
         </div>
       </header>
 

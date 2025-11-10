@@ -1,9 +1,12 @@
 import React, { useState } from "react";
-import { User as UserIcon, Mail, Shield, Calendar, Edit2, Save, X, ImagePlus } from "lucide-react";
+import { User as UserIcon, Mail, Shield, Calendar, Edit2, Save, X, ImagePlus, Trash2 } from "lucide-react";
 import { Session, useAuth } from "../../hooks/useAuth";
+import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Ticket } from "../../hooks/useTickets";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { supabase, isSupabaseEnabled } from "@/lib/supabase";
 
 interface ProfileViewProps {
   session: Session;
@@ -16,12 +19,41 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
     name: session.name,
     email: session.email,
   });
-  const { users, setMyAvatar } = useAuth();
+  const { users, setMyAvatar, updateUser } = useAuth();
+  const { refreshAuthUser, reloadProfile, profile } = useSupabaseAuth();
   const me = users.find((u) => u.id === session.id);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(me?.avatar || null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const { toast } = useToast();
 
   const myTickets = tickets.filter((t) => t.authorId === session.id);
   const myResolvedTickets = myTickets.filter((t) => t.status === "Resolvido" || t.status === "Fechado");
+
+  // Mantém o formulário sincronizado com o nome/email da sessão após alterações
+  React.useEffect(() => {
+    setFormData({ name: session.name, email: session.email });
+  }, [session.name, session.email]);
+
+  // Na inicialização, carrega avatar diretamente do banco (profiles.avatar_url)
+  React.useEffect(() => {
+    (async () => {
+      if (isSupabaseEnabled && supabase) {
+        try {
+          const { data, error } = await supabase
+            .from("profiles")
+            .select("avatar_url")
+            .eq("user_id", session.id)
+            .maybeSingle();
+          if (!error) {
+            const url = (data as any)?.avatar_url as string | undefined;
+            if (url) setAvatarPreview(url);
+          }
+        } catch {}
+      } else if (me?.avatar) {
+        setAvatarPreview(me.avatar);
+      }
+    })();
+  }, [isSupabaseEnabled, me?.avatar]);
 
   const avgResponseTime = myResolvedTickets.length > 0
     ? myResolvedTickets.reduce((acc, t) => {
@@ -112,22 +144,105 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        const reader = new FileReader();
-                        reader.onload = () => setAvatarPreview(String(reader.result));
-                        reader.readAsDataURL(file);
+                        setAvatarFile(file);
+                        const objectUrl = URL.createObjectURL(file);
+                        setAvatarPreview(objectUrl);
                       }}
                     />
                   </label>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">PNG/JPEG até ~1MB recomendado.</p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Button
                   type="button"
-                  onClick={() => {
-                    if (avatarPreview) setMyAvatar(avatarPreview);
-                    setEditing(false);
-                  }}
+                  onClick={async () => {
+                    try {
+                      // Atualiza avatar local imediatamente para feedback visual
+                      if (avatarPreview) setMyAvatar(avatarPreview);
+
+                       // Se Supabase estiver habilitado, atualiza tabela profiles (sem metadata)
+                       if (isSupabaseEnabled && supabase) {
+                        let publicAvatarUrl: string | null = null;
+                        if (avatarFile) {
+                          // Compressão da imagem antes do upload (WEBP ~0.8, máx 512px)
+                          async function compressImage(file: File, maxSize = 512, quality = 0.8): Promise<{ blob: Blob; ext: string }>{
+                            const img = document.createElement("img");
+                            const url = URL.createObjectURL(file);
+                            img.src = url;
+                            await new Promise((res, rej) => {
+                              img.onload = () => res(null);
+                              img.onerror = () => rej(new Error("Falha ao carregar imagem"));
+                            });
+                            const canvas = document.createElement("canvas");
+                            const { naturalWidth: w, naturalHeight: h } = img;
+                            const scale = Math.min(1, maxSize / Math.max(w, h));
+                            canvas.width = Math.round(w * scale);
+                            canvas.height = Math.round(h * scale);
+                            const ctx = canvas.getContext("2d");
+                            if (!ctx) throw new Error("Canvas não suportado");
+                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                            const ext = "webp";
+                            const blob: Blob | null = await new Promise((res) => canvas.toBlob(res, "image/webp", quality));
+                            URL.revokeObjectURL(url);
+                            return { blob: blob ?? file, ext };
+                          }
+
+                          const { blob: compressed, ext: outExt } = await compressImage(avatarFile);
+                          const path = `${profile?.company_id ?? "_"}/${session.id}/${Date.now()}.${outExt}`;
+                          const { error: upErr } = await supabase.storage.from("avatars").upload(path, compressed, { upsert: true });
+                          if (upErr) throw upErr;
+                          const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
+                          publicAvatarUrl = pub?.publicUrl ?? null;
+                          if (publicAvatarUrl) {
+                            setMyAvatar(publicAvatarUrl);
+                          }
+                        }
+                        // Atualiza tabela profiles com o novo nome e avatar_url (quando disponível)
+                        const payload: Record<string, unknown> = { full_name: formData.name };
+                        if (publicAvatarUrl !== null) {
+                          (payload as any).avatar_url = publicAvatarUrl;
+                        }
+                        let { error: profErr } = await supabase
+                          .from("profiles")
+                          .update(payload)
+                          .eq("user_id", session.id);
+                        if (profErr) {
+                          const msg = (profErr.message || "").toLowerCase();
+                          // Fallback quando a coluna avatar_url ainda não existe no banco
+                          if (msg.includes("avatar_url") && msg.includes("column") && msg.includes("does not exist")) {
+                            const { error: profErr2 } = await supabase
+                              .from("profiles")
+                              .update({ full_name: formData.name })
+                              .eq("user_id", session.id);
+                            if (profErr2) throw profErr2;
+                          } else {
+                            throw profErr;
+                          }
+                        }
+
+                        // Se o email foi alterado, atualiza no Supabase (pode exigir confirmação)
+                        if (formData.email && formData.email !== session.email) {
+                          const { error: emailErr } = await supabase.auth.updateUser({ email: formData.email });
+                          if (emailErr) {
+                            // Não aborta todo o fluxo: informa que o email não foi atualizado
+                            toast({ title: "Email não atualizado", description: emailErr.message });
+                          }
+                        }
+
+                         toast({ title: "Perfil atualizado", description: "Suas alterações foram salvas no banco." });
+                         // Recarrega o profile para refletir o novo nome/avatar
+                         await reloadProfile();
+                       } else {
+                         // Fallback: atualiza store local quando Supabase não está configurado
+                         updateUser(session.id, { name: formData.name, email: formData.email });
+                         toast({ title: "Perfil atualizado", description: "Alterações salvas localmente." });
+                       }
+                       setEditing(false);
+                     } catch (err: any) {
+                       toast({ title: "Falha ao salvar perfil", description: err?.message ?? "Erro inesperado" });
+                     }
+                   }}
                   className="gap-2"
                 >
                   <Save className="w-4 h-4" />
@@ -135,6 +250,51 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
                 </Button>
                 <Button type="button" variant="secondary" onClick={() => setEditing(false)}>
                   Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="gap-2"
+                  onClick={async () => {
+                    try {
+                      setAvatarPreview(null);
+                      setAvatarFile(null);
+                      setMyAvatar("");
+                      if (isSupabaseEnabled && supabase) {
+                        // Carrega avatar atual para remover do Storage, se existir
+                        const { data, error } = await supabase
+                          .from("profiles")
+                          .select("avatar_url")
+                          .eq("user_id", session.id)
+                          .maybeSingle();
+                        if (!error) {
+                          const currentUrl = (data as any)?.avatar_url as string | undefined;
+                          if (currentUrl) {
+                            // Extrai o caminho do arquivo do public URL
+                            const marker = "/object/public/avatars/";
+                            const idx = currentUrl.indexOf(marker);
+                            if (idx !== -1) {
+                              const objectPath = currentUrl.slice(idx + marker.length);
+                              await supabase.storage.from("avatars").remove([objectPath]);
+                            }
+                          }
+                        }
+                        // Zera avatar_url no banco
+                        const { error: profErr } = await supabase
+                          .from("profiles")
+                          .update({ avatar_url: null } as any)
+                          .eq("user_id", session.id);
+                        if (profErr) throw profErr;
+                        await reloadProfile();
+                      }
+                      toast({ title: "Foto removida", description: "Seu perfil voltou às iniciais." });
+                    } catch (err: any) {
+                      toast({ title: "Falha ao remover foto", description: err?.message ?? "Erro inesperado" });
+                    }
+                  }}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Remover foto
                 </Button>
               </div>
             </form>

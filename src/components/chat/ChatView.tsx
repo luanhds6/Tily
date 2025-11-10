@@ -10,13 +10,12 @@ import { requestNotificationPermission, notify } from "@/hooks/useNotifications"
 
 interface ChatViewProps {
   session: Session;
-  users: Array<{ id: string; name: string; role: string }>;
+  users: Array<{ id: string; name: string; role: string; avatar?: string }>;
 }
 
 export function ChatView({ session, users }: ChatViewProps) {
-  const isAdmin = session.role === "admin" || session.role === "master";
-  const [selectedUserId, setSelectedUserId] = useState<string>(users.find((u) => u.role === "user")?.id || "");
-  const roomId = isAdmin ? selectedUserId || session.id : session.id;
+  const [selectedUserId, setSelectedUserId] = useState<string>(users.find((u) => u.id !== session.id)?.id || "");
+  const roomId = selectedUserId || session.id;
   const { messages, sendMessage, setRoomId } = useChat(roomId);
   const [text, setText] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
@@ -51,72 +50,66 @@ export function ChatView({ session, users }: ChatViewProps) {
 
   const getInitials = (name: string) => name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 
-  const contacts = users.filter((u) => u.role === "user");
+  const contacts = users.filter((u) => u.id !== session.id);
   const filteredContacts = useMemo(
     () => contacts.filter((u) => (u.name || "").toLowerCase().includes(search.trim().toLowerCase())),
     [contacts, search],
   );
 
-  const activeContact = isAdmin ? users.find((u) => u.id === selectedUserId) : null;
+  const activeContact = users.find((u) => u.id === selectedUserId) || null;
 
   return (
     <div className="h-[calc(100vh-4rem)] sm:h-[calc(100vh-4rem)] p-2 sm:p-6">
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4 h-full">
-        {/* Sidebar de contatos (admin) */}
-        {isAdmin && (
-          <Card className="flex flex-col h-full">
-            <div className="p-3 border-b border-border flex items-center gap-2">
-              <Search className="w-4 h-4 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Pesquisar contatos"
-              />
-            </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-1">
-              {filteredContacts.map((u) => (
-                <button
-                  key={u.id}
-                  onClick={() => setSelectedUserId(u.id)}
-                  className={`w-full text-left px-3 py-2 rounded-md border hover:bg-muted/50 transition-colors ${
-                    selectedUserId === u.id ? "bg-primary/10 border-primary/20" : "border-transparent"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Avatar className="w-8 h-8">
-                      {u.avatar ? <AvatarImage src={u.avatar} alt={u.name} /> : <AvatarFallback>{getInitials(u.name)}</AvatarFallback>}
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium truncate">{u.name}</div>
-                      <div className="text-xs text-muted-foreground">Conversa com suporte</div>
-                    </div>
+        {/* Sidebar de contatos (todos os perfis) */}
+        <Card className="flex flex-col h-full">
+          <div className="p-3 border-b border-border flex items-center gap-2">
+            <Search className="w-4 h-4 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Pesquisar contatos"
+            />
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {filteredContacts.map((u) => (
+              <button
+                key={u.id}
+                onClick={() => setSelectedUserId(u.id)}
+                className={`w-full text-left px-3 py-2 rounded-md border hover:bg-muted/50 transition-colors ${
+                  selectedUserId === u.id ? "bg-primary/10 border-primary/20" : "border-transparent"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Avatar className="w-8 h-8">
+                    {u.avatar ? <AvatarImage src={u.avatar} alt={u.name} /> : <AvatarFallback>{getInitials(u.name)}</AvatarFallback>}
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{u.name}</div>
+                    <div className="text-xs text-muted-foreground">Mensagem direta</div>
                   </div>
-                </button>
-              ))}
-              {filteredContacts.length === 0 && (
-                <div className="text-xs text-muted-foreground px-3">Nenhum contato encontrado</div>
-              )}
-            </div>
-          </Card>
-        )}
+                </div>
+              </button>
+            ))}
+            {filteredContacts.length === 0 && (
+              <div className="text-xs text-muted-foreground px-3">Nenhum contato encontrado</div>
+            )}
+          </div>
+        </Card>
 
         {/* Conversa */}
         <Card className="flex flex-col h-full">
           {/* Cabeçalho da conversa */}
           <div className="px-4 py-2 border-b border-border flex items-center gap-3">
             <Avatar className="w-8 h-8">
-              {isAdmin && activeContact?.avatar ? (
+              {activeContact?.avatar ? (
                 <AvatarImage src={activeContact.avatar} alt={activeContact.name} />
               ) : (
-                <AvatarFallback>
-                  {isAdmin ? getInitials(activeContact?.name || "?") : getInitials("Suporte TI")}
-                </AvatarFallback>
+                <AvatarFallback>{getInitials(activeContact?.name || "?")}</AvatarFallback>
               )}
             </Avatar>
             <div className="flex flex-col">
-              <span className="font-semibold text-sm">
-                {isAdmin ? activeContact?.name || "Selecione um contato" : "Suporte TI"}
-              </span>
+              <span className="font-semibold text-sm">{activeContact?.name || "Selecione um contato"}</span>
               <span className="text-xs text-muted-foreground">online</span>
             </div>
           </div>
