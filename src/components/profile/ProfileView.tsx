@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Ticket } from "../../hooks/useTickets";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { supabase, isSupabaseEnabled } from "@/lib/supabase";
+import { supabase, isSupabaseEnabled, ensureProfileForUser } from "@/lib/supabase";
 
 interface ProfileViewProps {
   session: Session;
@@ -25,14 +25,24 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(me?.avatar || null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const { toast } = useToast();
+  const AVATARS_BUCKET = (import.meta.env.VITE_SUPABASE_AVATARS_BUCKET as string | undefined) ?? "avatars";
+
+  async function blobToDataUrl(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (e) => reject(e);
+      reader.readAsDataURL(blob);
+    });
+  }
 
   const myTickets = tickets.filter((t) => t.authorId === session.id);
   const myResolvedTickets = myTickets.filter((t) => t.status === "Resolvido" || t.status === "Fechado");
 
-  // Mantém o formulário sincronizado com o nome/email da sessão após alterações
+  // Mantém o formulário sincronizado com o nome do perfil quando disponível
   React.useEffect(() => {
-    setFormData({ name: session.name, email: session.email });
-  }, [session.name, session.email]);
+    setFormData({ name: profile?.full_name ?? session.name, email: session.email });
+  }, [profile?.full_name, session.name, session.email]);
 
   // Na inicialização, carrega avatar diretamente do banco (profiles.avatar_url)
   React.useEffect(() => {
@@ -83,13 +93,13 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
             <div className="flex items-center gap-4">
               <Avatar className="w-20 h-20">
                 {avatarPreview ? (
-                  <AvatarImage src={avatarPreview} alt={session.name} />
+                  <AvatarImage src={avatarPreview} alt={(profile?.full_name ?? formData.name ?? session.name)} />
                 ) : (
-                  <AvatarFallback>{session.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0,2)}</AvatarFallback>
+                  <AvatarFallback>{(profile?.full_name ?? formData.name ?? session.name).split(" ").map((n) => n[0]).join("").toUpperCase().slice(0,2)}</AvatarFallback>
                 )}
               </Avatar>
               <div>
-                <h2 className="text-xl font-bold text-foreground">{session.name}</h2>
+                <h2 className="text-xl font-bold text-foreground">{editing ? formData.name : (profile?.full_name ?? formData.name ?? session.name)}</h2>
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-1 ${
                   session.role === "master" ? "bg-warning/10 text-warning" :
                   session.role === "admin" ? "bg-primary/10 text-primary" :
@@ -190,14 +200,26 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
 
                           const { blob: compressed, ext: outExt } = await compressImage(avatarFile);
                           const path = `${profile?.company_id ?? "_"}/${session.id}/${Date.now()}.${outExt}`;
-                          const { error: upErr } = await supabase.storage.from("avatars").upload(path, compressed, { upsert: true });
-                          if (upErr) throw upErr;
-                          const { data: pub } = supabase.storage.from("avatars").getPublicUrl(path);
-                          publicAvatarUrl = pub?.publicUrl ?? null;
+                          const { error: upErr } = await supabase.storage.from(AVATARS_BUCKET).upload(path, compressed, { upsert: true });
+                          if (upErr) {
+                            const msg = (upErr.message || "").toLowerCase();
+                            // Fallback: bucket não existe – salva avatar diretamente no banco como data URL
+                            if (msg.includes("bucket not found")) {
+                              const dataUrl = await blobToDataUrl(compressed);
+                              publicAvatarUrl = dataUrl;
+                            } else {
+                              throw upErr;
+                            }
+                          } else {
+                            const { data: pub } = supabase.storage.from(AVATARS_BUCKET).getPublicUrl(path);
+                            publicAvatarUrl = pub?.publicUrl ?? null;
+                          }
                           if (publicAvatarUrl) {
                             setMyAvatar(publicAvatarUrl);
                           }
                         }
+                        // Garante que o perfil exista antes de atualizar
+                        await ensureProfileForUser({ id: session.id, email: session.email });
                         // Atualiza tabela profiles com o novo nome e avatar_url (quando disponível)
                         const payload: Record<string, unknown> = { full_name: formData.name };
                         if (publicAvatarUrl !== null) {
@@ -271,11 +293,15 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
                           const currentUrl = (data as any)?.avatar_url as string | undefined;
                           if (currentUrl) {
                             // Extrai o caminho do arquivo do public URL
-                            const marker = "/object/public/avatars/";
+                            const marker = `/object/public/${AVATARS_BUCKET}/`;
                             const idx = currentUrl.indexOf(marker);
                             if (idx !== -1) {
                               const objectPath = currentUrl.slice(idx + marker.length);
-                              await supabase.storage.from("avatars").remove([objectPath]);
+                              await supabase.storage.from(AVATARS_BUCKET).remove([objectPath]);
+                            } else if (currentUrl.startsWith("data:")) {
+                              // Avatar salvo como data URL – nada para remover do Storage
+                            } else {
+                              // Caso desconhecido: ignora remoção no storage
                             }
                           }
                         }

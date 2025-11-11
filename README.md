@@ -177,3 +177,41 @@ The app will optimistically update the UI and persist to Supabase when configure
 - Admins can select which user room to view/respond in the Chat screen.
 - Messages are stored in `public.chat_messages` and stream in Realtime.
 - Notifications are triggered on incoming messages from other participants.
+
+## Supabase: políticas de `profiles` e view `auth_users_view`
+
+Para corrigir o erro “infinite recursion detected in policy for relation 'profiles'” e a mensagem “cannot drop columns from view”, use o arquivo SQL incluído no projeto:
+
+- Arquivo: `supabase/policies_and_view.sql`
+- O que ele faz:
+  - Derruba e recria a view `public.auth_users_view` com colunas usadas pelo app (inclui `phone`).
+  - Concede privilégios de leitura necessários (`auth.users`, `auth_users_view`).
+  - Remove quaisquer policies antigas em `public.profiles` e cria policies seguras (auto‑acesso e acesso de admin via `user_access_categories`).
+  - Mantém RLS ativo e faz os GRANTs necessários.
+  - Garante a existência da categoria `admin` em `access_categories`.
+
+### Como aplicar no Supabase
+
+1. Abra seu projeto no Supabase e vá em `SQL Editor`.
+2. Cole o conteúdo de `supabase/policies_and_view.sql` e execute.
+3. Atribua a categoria `admin` para o(s) usuário(s) que devem administrar:
+
+```sql
+insert into public.user_access_categories (user_id, category_id)
+select 'YOUR_USER_UUID', ac.id from public.access_categories ac where ac.key = 'admin'
+on conflict (user_id, category_id) do nothing;
+```
+
+Substitua `YOUR_USER_UUID` pelo UUID do usuário (o mesmo `id` de `auth.users`).
+
+### Testes rápidos
+
+- Faça login com um usuário comum: deve conseguir ler/atualizar apenas o próprio `profiles`.
+- Faça login com um usuário admin: deve conseguir listar usuários via `auth_users_view` e atualizar perfis.
+- Endpoint REST (se habilitado): `GET /rest/v1/auth_users_view?select=*&order=full_name.asc` deve responder sem erro 500.
+
+### Observações
+
+- Views não possuem RLS; a segurança é aplicada nas tabelas base (especialmente `public.profiles`).
+- Se você já possui policies específicas em `profiles`, o script primeiro remove todas para evitar ciclos, e depois recria as necessárias.
+- O app não utiliza mais `app_metadata`/`user_metadata` do Supabase Auth. Papéis e dados do usuário são derivados de `public.profiles` e da associação `user_access_categories`.

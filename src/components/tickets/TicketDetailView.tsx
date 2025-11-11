@@ -175,7 +175,7 @@ export function TicketDetailView({
                 </Avatar>
                 <div>
                   <p className="text-xs text-muted-foreground">Autor</p>
-                  <p className="font-medium">{ticket.authorName}</p>
+                  <p className="font-medium">{users.find((u) => u.id === ticket.authorId)?.name || ticket.authorName}</p>
                 </div>
               </div>
             </div>

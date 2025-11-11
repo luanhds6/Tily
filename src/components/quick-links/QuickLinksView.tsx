@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
+import { useAccessControl } from "@/hooks/useAccessControl";
 import { Session } from "@/hooks/useAuth";
 import { supabase, isSupabaseEnabled, getCurrentCompany } from "@/lib/supabase";
 import {
@@ -68,7 +69,9 @@ export function QuickLinksView({ session }: { session: Session | null }) {
   const [open, setOpen] = useState(true);
   const [links, setLinks] = useState<QuickLink[]>([]);
 
-  const isAdmin = !!session && (session.role === "admin" || session.role === "master");
+  // Usa a role efetiva do hook de controle de acesso
+  const access = useAccessControl(session);
+  const isAdmin = (access?.perms?.role === "admin" || access?.perms?.role === "master");
 
   // Form state
   const [title, setTitle] = useState("");

@@ -190,7 +190,7 @@ export function TicketListView({ tickets, users, onTicketClick, title, isAdmin =
                             <AvatarFallback>{(ticket.authorName || "?").slice(0, 2).toUpperCase()}</AvatarFallback>
                           )}
                         </Avatar>
-                        <span>{ticket.authorName}</span>
+                        <span>{users.find((u) => u.id === ticket.authorId)?.name || ticket.authorName}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />

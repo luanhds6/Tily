@@ -256,6 +256,77 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: Json
       }
+      get_auth_users: {
+        Args: Record<string, never>
+        Returns: {
+          id: string
+          email: string | null
+          full_name: string | null
+          role: string | null
+          is_master: boolean | null
+          is_active: boolean | null
+          company_id: string | null
+          phone: string | null
+          last_sign_in_at: string | null
+          created_at: string | null
+          updated_at: string | null
+        }[]
+      }
+      get_auth_user: {
+        Args: { p_user_id: string }
+        Returns: {
+          id: string
+          email: string | null
+          full_name: string | null
+          role: string | null
+          is_master: boolean | null
+          is_active: boolean | null
+          company_id: string | null
+          phone: string | null
+          last_sign_in_at: string | null
+          created_at: string | null
+          updated_at: string | null
+        }[]
+      }
+      get_auth_users_by_company: {
+        Args: { p_company_id: string }
+        Returns: {
+          id: string
+          email: string | null
+          full_name: string | null
+          role: string | null
+          is_master: boolean | null
+          is_active: boolean | null
+          company_id: string | null
+          phone: string | null
+          last_sign_in_at: string | null
+          created_at: string | null
+          updated_at: string | null
+        }[]
+      }
+      admin_update_user: {
+        Args: {
+          p_user_id: string
+          p_full_name?: string | null
+          p_role?: string | null
+          p_is_master?: boolean | null
+          p_is_active?: boolean | null
+        }
+        Returns: undefined
+      }
+      admin_delete_user: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
+      bootstrap_master_if_none: {
+        Args: {
+          p_user_id: string
+          p_email: string
+          p_full_name?: string | null
+          p_phone?: string | null
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

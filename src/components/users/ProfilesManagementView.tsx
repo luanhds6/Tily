@@ -345,19 +345,22 @@ export default function ProfilesManagementView() {
     }
 
     setInviting(true);
-    const { data, error } = await supabase.rpc("admin_create_user" as any, {
-      p_email: email.trim(),
-      p_password: password.trim(),
-      p_full_name: fullName || null,
-      p_role: role,
-      p_is_master: isMaster ? inviteMaster : false,
+    const resp = await supabase.functions.invoke("admin-create-user", {
+      body: {
+        email: email.trim(),
+        password: password.trim(),
+        full_name: fullName || null,
+        phone: phone || null,
+        role: role,
+        is_master: isMaster ? inviteMaster : false,
+      },
     });
     setInviting(false);
 
-    if (error) {
-      setInviteMsg(`Erro: ${error.message}`);
+    if (resp.error) {
+      setInviteMsg(`Erro: ${resp.error.message}`);
     } else {
-      const newUserId = data as string | null;
+      const newUserId = (resp.data as any)?.user_id ?? (resp.data as any)?.id ?? null;
       if (newUserId) {
         if (unitId) {
           await setUserUnit(newUserId, unitId || null);

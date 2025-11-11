@@ -22,7 +22,7 @@ import { Ticket, User, Mail } from "lucide-react";
 import { ChatView } from "./chat/ChatView";
 import { ChatFloating } from "./chat/ChatFloating";
 import { useRealtimeMessages } from "../hooks/useSupabaseRealtime";
-import { isSupabaseEnabled } from "@/lib/supabase";
+import { isSupabaseEnabled, supabase } from "@/lib/supabase";
 import { requestNotificationPermission, notify } from "../hooks/useNotifications";
 import { InformativosView } from "./informativos/InformativosView";
 import { NotificationCenterProvider, useNotificationCenter } from "@/hooks/useNotificationCenter";
@@ -137,7 +137,20 @@ function AppWithNotifications() {
       }
     }
     loadChatUsers();
-    return () => { active = false; };
+    // Assina mudanças em perfis para manter nomes e papéis atualizados em tempo real
+    let sub: any = null;
+    if (isSupabaseEnabled && supabase) {
+      try {
+        // Atualiza lista de chat users sempre que perfil for inserido/atualizado/deletado
+        sub = supabase
+          .channel("profiles_live")
+          .on("postgres_changes", { event: "INSERT", schema: "public", table: "profiles" }, () => loadChatUsers())
+          .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" }, () => loadChatUsers())
+          .on("postgres_changes", { event: "DELETE", schema: "public", table: "profiles" }, () => loadChatUsers())
+          .subscribe();
+      } catch {}
+    }
+    return () => { active = false; try { if (sub && supabase) supabase.removeChannel(sub); } catch {} };
   }, [isSupabaseEnabled, user?.id]);
 
   // Usa a role efetiva vinda do access control para refletir corretamente na UI
@@ -292,14 +305,14 @@ function AppWithNotifications() {
 
           if (view === "dashboard" && access.perms.permissions["dashboard"]) {
             content = (
-              <DashboardView tickets={tickets} session={session} agents={agents} onViewChange={handleViewChange} />
+              <DashboardView tickets={tickets} session={displaySession!} agents={agents} onViewChange={handleViewChange} />
             );
           } else if (view === "chat" && access.perms.permissions["chat"]) {
             content = <ChatView session={session} users={isSupabaseEnabled ? chatUsers : users} />;
           } else if (view === "chamados" && access.perms.permissions["tickets"]) {
             content = (
               <TicketsPage
-                session={session}
+                session={displaySession!}
                 users={users}
                 tickets={tickets}
                 onTicketClick={handleTicketClick}
@@ -307,14 +320,14 @@ function AppWithNotifications() {
               />
             );
           } else if (view === "informativos" && access.perms.permissions["informativos"]) {
-            content = <InformativosView session={session} />;
+            content = <InformativosView session={displaySession!} />;
           } else if (view === "links" && access.perms.permissions["quick_links"]) {
-            content = <QuickLinksView session={session} />;
+            content = <QuickLinksView session={displaySession!} />;
           } else if (view === "detail" && selectedTicket && session) {
             content = (
               <TicketDetailView
                 ticket={selectedTicket}
-                session={session}
+                session={displaySession!}
                 users={users}
                 agents={agents}
                 onBack={() => setView("chamados")}
