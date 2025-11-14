@@ -17,21 +17,24 @@ export type Database = {
       access_categories: {
         Row: {
           id: string
-          name: string
+          key: string | null
+          name: string | null
           description: string | null
           is_active: boolean
           created_at: string
         }
         Insert: {
           id?: string
-          name: string
+          key?: string | null
+          name?: string | null
           description?: string | null
           is_active?: boolean
           created_at?: string
         }
         Update: {
           id?: string
-          name?: string
+          key?: string | null
+          name?: string | null
           description?: string | null
           is_active?: boolean
           created_at?: string
@@ -246,6 +249,193 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      quick_links: {
+        Row: {
+          id: string
+          company_id: string
+          title: string
+          url: string
+          icon: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          company_id: string
+          title: string
+          url: string
+          icon?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          company_id?: string
+          title?: string
+          url?: string
+          icon?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quick_links_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tickets: {
+        Row: {
+          id: string
+          author_id: string
+          author_name: string
+          title: string
+          description: string | null
+          category: string
+          priority: string
+          status: string
+          created_at: string
+          updated_at: string
+          resolved_at: string | null
+          assigned_to: string | null
+          assigned_to_name: string | null
+          tags: string[]
+          sla: number
+        }
+        Insert: {
+          id: string
+          author_id: string
+          author_name: string
+          title: string
+          description?: string | null
+          category: string
+          priority: string
+          status: string
+          created_at?: string
+          updated_at?: string
+          resolved_at?: string | null
+          assigned_to?: string | null
+          assigned_to_name?: string | null
+          tags?: string[]
+          sla?: number
+        }
+        Update: {
+          id?: string
+          author_id?: string
+          author_name?: string
+          title?: string
+          description?: string | null
+          category?: string
+          priority?: string
+          status?: string
+          created_at?: string
+          updated_at?: string
+          resolved_at?: string | null
+          assigned_to?: string | null
+          assigned_to_name?: string | null
+          tags?: string[]
+          sla?: number
+        }
+        Relationships: []
+      }
+      messages: {
+        Row: {
+          id: string
+          ticket_id: string
+          author_id: string
+          author_name: string
+          text: string | null
+          attachments: Json[]
+          created_at: string
+        }
+        Insert: {
+          id: string
+          ticket_id: string
+          author_id: string
+          author_name: string
+          text?: string | null
+          attachments?: Json[]
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          ticket_id?: string
+          author_id?: string
+          author_name?: string
+          text?: string | null
+          attachments?: Json[]
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_messages: {
+        Row: {
+          id: string
+          room_id: string
+          sender_id: string
+          sender_name: string
+          text: string | null
+          attachments: Json[]
+          created_at: string
+        }
+        Insert: {
+          id: string
+          room_id: string
+          sender_id: string
+          sender_name: string
+          text?: string | null
+          attachments?: Json[]
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          room_id?: string
+          sender_id?: string
+          sender_name?: string
+          text?: string | null
+          attachments?: Json[]
+          created_at?: string
+        }
+        Relationships: []
+      }
+      informativos: {
+        Row: {
+          id: string
+          title: string
+          content: string
+          type: string
+          created_at: string
+          created_by: string
+          created_by_name: string
+        }
+        Insert: {
+          id: string
+          title: string
+          content: string
+          type: string
+          created_at?: string
+          created_by: string
+          created_by_name: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          content?: string
+          type?: string
+          created_at?: string
+          created_by?: string
+          created_by_name?: string
+        }
+        Relationships: []
       }
     }
     Views: {

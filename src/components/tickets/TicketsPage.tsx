@@ -14,7 +14,7 @@ interface TicketsPageProps {
 }
 
 export function TicketsPage({ session, users, tickets, onTicketClick, onCreateTicket }: TicketsPageProps) {
-  const isAdmin = session.role === "admin" || session.role === "master";
+const isAdmin = session.role === "master";
   const [tab, setTab] = useState<string>(isAdmin ? "todos" : "meus");
 
   const myTickets = tickets.filter((t) => t.authorId === session.id);

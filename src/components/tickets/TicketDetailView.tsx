@@ -39,7 +39,7 @@ export function TicketDetailView({
   const [replyText, setReplyText] = useState("");
   const [attachments, setAttachments] = useState<any[]>([]);
 
-  const isAdmin = session.role === "admin" || session.role === "master";
+const isAdmin = session.role === "master";
   const canEdit = isAdmin || session.id === ticket.authorId;
   const isOwner = session.id === ticket.authorId;
   const isResolved = ticket.status === "Resolvido";

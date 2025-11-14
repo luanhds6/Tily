@@ -8,7 +8,6 @@ import PageTransition from "./layout/PageTransition";
 import { DashboardView } from "./dashboard/DashboardView";
 import { AnalyticsView } from "./analytics/AnalyticsView";
 import { KnowledgeBaseView } from "./knowledge-base/KnowledgeBaseView";
-import MeetingsPage from "./meetings/MeetingsPage";
 import { ProfileView } from "./profile/ProfileView";
 import { SettingsView } from "./settings/SettingsView";
 import AdminSettingsPage from "./settings/AdminSettingsPage";
@@ -16,6 +15,7 @@ import { TicketListView } from "./tickets/TicketListView";
 import { TicketDetailView } from "./tickets/TicketDetailView";
 import { NewTicketForm } from "./tickets/NewTicketForm";
 import { TicketsPage } from "./tickets/TicketsPage";
+import QuickTicketFloating from "./tickets/QuickTicketFloating";
 import { UsersManagementView } from "./users/UsersManagementView";
 import ProfilesManagementView from "./users/ProfilesManagementView";
 import { Ticket, User, Mail } from "lucide-react";
@@ -83,15 +83,15 @@ function AppWithNotifications() {
           if (active) setSupabaseAgents(null);
           return;
         }
-        const admins = (data ?? []).filter((row: any) => (row.role === "admin" || row.is_master === true) && row.is_active !== false);
+        const admins = (data ?? []).filter((row: any) => (row.is_master === true) && row.is_active !== false);
         const mapped: User[] = admins.map((row: any) => ({
           id: row.user_id,
           name: (row.full_name as string | null) ?? (row.email as string | null) ?? row.user_id,
           email: (row.email as string | null) ?? "",
           password: "",
-          role: row.is_master ? "master" : "admin",
+          role: row.is_master ? "master" : "user",
           active: row.is_active ?? true,
-          avatar: undefined,
+          avatar: (row.avatar_url as string | null) ?? undefined,
           department: undefined,
         }));
         if (active) setSupabaseAgents(mapped);
@@ -128,7 +128,7 @@ function AppWithNotifications() {
           id: row.user_id,
           name: (row.full_name as string | null) ?? (row.email as string | null) ?? row.user_id,
           role: row.is_master ? "master" : row.role ?? "user",
-          avatar: undefined,
+          avatar: (row.avatar_url as string | null) ?? undefined,
         }));
         if (active) setChatUsers(mapped);
       } catch (e) {
@@ -150,14 +150,31 @@ function AppWithNotifications() {
           .subscribe();
       } catch {}
     }
-    return () => { active = false; try { if (sub && supabase) supabase.removeChannel(sub); } catch {} };
+    return () => {
+      active = false;
+      try {
+        if (sub && supabase) {
+          const state = (sub as any)?.state;
+          if (state === "joined" || state === "joining" || state === "leaving") {
+            Promise.resolve(sub.unsubscribe?.()).catch(() => {});
+          }
+        }
+      } catch {}
+    };
   }, [isSupabaseEnabled, user?.id]);
+
+  // Lista de usuários utilizada pela UI (Tickets, ChatFloating) deve ser memoizada
+  const usersForUI = useMemo(() => (
+    isSupabaseEnabled
+      ? chatUsers.map(u => ({ id: u.id, name: u.name, email: "", password: "", role: u.role, active: true, avatar: u.avatar, department: undefined }))
+      : users
+  ), [isSupabaseEnabled, chatUsers, users]);
 
   // Usa a role efetiva vinda do access control para refletir corretamente na UI
   const displaySession: LegacySession | null = useMemo(() => {
     if (!session) return null;
     const effectiveRole = access?.perms?.role;
-    if (effectiveRole === "master" || effectiveRole === "admin") {
+    if (effectiveRole === "master") {
       return { ...session, role: effectiveRole };
     }
     return session;
@@ -199,6 +216,33 @@ function AppWithNotifications() {
     updateUrlState("chamados");
   };
 
+  const handleQuickCreate = useCallback(
+    async (payload: { title: string; description?: string; priority?: string; attachments?: any[] }) => {
+      if (!session) return;
+      try {
+        await createTicket(session.id, session.name, {
+          title: payload.title,
+          description: payload.description,
+          priority: payload.priority,
+          // Armazena anexos como parte da mensagem inicial
+          attachments: payload.attachments || [],
+        });
+        addNotification({
+          title: "Ticket criado",
+          body: "Seu Ticket Rápido foi criado com sucesso.",
+          category: "ticket",
+        });
+      } catch (e: any) {
+        addNotification({
+          title: "Falha ao criar ticket",
+          body: e?.message || "Não foi possível criar o Ticket Rápido.",
+          category: "ticket",
+        });
+      }
+    },
+    [session, createTicket]
+  );
+
   // Solicita permissão de notificação quando o usuário está logado
   const hasRequestedNotifications = useRef(false);
 
@@ -233,7 +277,7 @@ function AppWithNotifications() {
     }
   });
 
-  const handleCreateUser = (data: { name: string; email: string; password: string; role: "user" | "admin" }) => {
+  const handleCreateUser = (data: { name: string; email: string; password: string; role: "user" | "master" }) => {
     createUser({ ...data, active: true });
   };
 
@@ -253,6 +297,38 @@ function AppWithNotifications() {
       }
     }
   }, [location.search]);
+
+  // Proteção de rota: redireciona para /login quando não autenticado (Supabase)
+  // Se a view atual não é permitida, redireciona para uma view segura
+  useEffect(() => {
+    const perms = access.perms.permissions;
+    const isPrivileged = access.perms.role === "master";
+    const canView = (id: string) => {
+      if (id === "settings") return isPrivileged || !!perms["settings"];
+      if (id === "dashboard") return isPrivileged || !!perms["dashboard"];
+      // Mapear view "chamados" para a permissão correta "tickets"
+      if (id === "chamados") return isPrivileged || !!perms["tickets"];
+      // Mapear view "links" para a permissão correta "quick_links"
+      if (id === "links") return isPrivileged || !!perms["quick_links"];
+      return !!perms[id as keyof typeof perms];
+    };
+
+    const preferredOrder = ["dashboard", "chamados", "informativos", "chat", "links", "profile", "settings"];
+    const pickFirstAllowed = (): string => {
+      for (const v of preferredOrder) {
+        if (canView(v)) return v;
+      }
+      return "chamados";
+    };
+
+    if (!access.loading && !canView(view)) {
+      const safe = pickFirstAllowed();
+      if (view !== safe) {
+        handleViewChange(safe);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [access.loading, access.perms.permissions, access.perms.role, view]);
 
   // Proteção de rota: redireciona para /login quando não autenticado (Supabase)
   if (isSupabaseEnabled && !loading && !session) {
@@ -313,7 +389,7 @@ function AppWithNotifications() {
             content = (
               <TicketsPage
                 session={displaySession!}
-                users={users}
+                users={usersForUI}
                 tickets={tickets}
                 onTicketClick={handleTicketClick}
                 onCreateTicket={handleNewTicket}
@@ -328,7 +404,7 @@ function AppWithNotifications() {
               <TicketDetailView
                 ticket={selectedTicket}
                 session={displaySession!}
-                users={users}
+                users={usersForUI}
                 agents={agents}
                 onBack={() => setView("chamados")}
                 onAddMessage={addMessage}
@@ -347,13 +423,11 @@ function AppWithNotifications() {
             content = <AnalyticsView tickets={tickets} agents={agents} />;
           } else if (view === "knowledge" && access.perms.permissions["knowledge"]) {
             content = <KnowledgeBaseView isAdmin={isAdmin} />;
-          } else if (view === "meetings" && access.perms.permissions["meetings"]) {
-            content = <MeetingsPage session={session} />;
           } else if (view === "profile" && access.perms.permissions["profile"]) {
             content = <ProfileView session={displaySession!} tickets={tickets} />;
           } else if (view === "settings") {
             content = (
-              (access.perms.role === "master" || access.perms.role === "admin") ? (
+              (access.perms.role === "master") ? (
                 <AdminSettingsPage
                   session={displaySession!}
                   users={users}
@@ -374,13 +448,21 @@ function AppWithNotifications() {
 
           return (
             <PageTransition viewKey={pageKey}>
-              {content}
+              {content ?? (
+                <div className="p-6">
+                  <div className="text-sm text-muted-foreground">Sem conteúdo disponível para esta visão.</div>
+                </div>
+              )}
             </PageTransition>
           );
         })()}
       </main>
       {/* Chat flutuante disponível globalmente */}
-      <ChatFloating session={session} users={users} />
+      <QuickTicketFloating
+        visible={!!session && !!access.perms.permissions["tickets"]}
+        onCreate={handleQuickCreate}
+      />
+      <ChatFloating session={session} users={usersForUI.map(u => ({ id: u.id, name: u.name, role: u.role, avatar: u.avatar }))} />
     </div>
   );
 }

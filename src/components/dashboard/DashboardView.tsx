@@ -41,7 +41,7 @@ function StatCard({ icon: Icon, label, value, variant = "default", onClick }: an
 }
 
 export function DashboardView({ tickets, session, agents, onViewChange }: DashboardViewProps) {
-  const isAdmin = session.role === "admin" || session.role === "master";
+const isAdmin = session.role === "master";
 
   // Calculate stats
   const myTickets = tickets.filter((t) => t.authorId === session.id);

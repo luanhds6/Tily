@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Settings, Bell, Palette, Globe, Shield, Database } from "lucide-react";
 
 export function SettingsView() {
@@ -12,6 +12,13 @@ export function SettingsView() {
 
   const [theme, setTheme] = useState("system");
   const [language, setLanguage] = useState("pt-BR");
+  // Integração Outlook removida
+
+  useEffect(() => {
+    // sem MSAL/Outlook
+  }, []);
+
+  // funções de conexão Outlook removidas
 
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
@@ -146,6 +153,8 @@ export function SettingsView() {
           </div>
         </div>
       </div>
+
+      {/* Integração Outlook removida */}
 
       {/* Security */}
       <div className="bg-card border border-border rounded-lg shadow-soft">

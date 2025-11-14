@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { supabase, type ProfileRow, ensureProfileForUser } from "../lib/supabase";
 
-type SessionRole = "user" | "admin" | "master";
+type SessionRole = "user" | "master";
 
 type AuthUser = {
   id: string;
@@ -21,13 +21,14 @@ type LightweightProfile = {
   is_active: boolean;
 };
 
-// Normaliza strings de papéis vindos do banco para "user" | "admin" | "master"
+// Normaliza strings de papéis vindos do banco para apenas "user" | "master"
 function normalizeRoleString(raw: string | null | undefined): SessionRole {
   const v = (raw || "").toString().trim().toLowerCase();
   if (!v) return "user";
   // Mapeamentos comuns
   if (["master", "master_admin", "super_admin", "owner", "root", "superuser"].includes(v)) return "master";
-  if (["admin", "administrator", "manager", "moderator"].includes(v)) return "admin";
+  // Qualquer valor de "admin" passa a ser tratado como "master" para manter privilégios
+  if (["admin", "administrator", "manager", "moderator"].includes(v)) return "master";
   return "user";
 }
 
@@ -37,8 +38,24 @@ function deriveRole(_user: User | null, profile: ProfileRow | null): SessionRole
     if (profile.is_master) return "master";
     const normalized = normalizeRoleString((profile as any).role as string | null | undefined);
     if (normalized === "master") return "master";
-    if (normalized === "admin") return "admin";
   }
+  // Fallback: usar role efetiva persistida em sessão para evitar regressão após F5
+  try {
+    const userId = _user?.id;
+    if (userId) {
+      // Primeiro tenta localStorage (mais robusto entre origens/portas)
+      let stored = null;
+      try { stored = localStorage.getItem(`effective_role:${userId}`); } catch {}
+      // Backcompat: se não houver em localStorage, tenta sessionStorage
+      if (!stored) {
+        try { stored = sessionStorage.getItem(`effective_role:${userId}`); } catch {}
+      }
+      const v = (stored || "").toLowerCase();
+      if (v === "master") return "master";
+      // Backcompat: admin persistido vira master
+      if (v === "admin") return "master";
+    }
+  } catch {}
   return "user";
 }
 
@@ -46,6 +63,12 @@ function deriveProfile(_user: User | null, _role: SessionRole): LightweightProfi
   // Não derivamos mais perfil a partir de metadados do Auth
   return null;
 }
+
+// Lista de e-mails configurados como MASTER via variável de ambiente (VITE_MASTER_EMAILS)
+const MASTER_EMAILS: string[] = String((import.meta as any).env?.VITE_MASTER_EMAILS || "")
+  .split(",")
+  .map((e: string) => e.trim().toLowerCase())
+  .filter(Boolean);
 
 export function useSupabaseAuth() {
   const [sessionUser, setSessionUser] = useState<User | null>(null);
@@ -71,6 +94,23 @@ export function useSupabaseAuth() {
           try {
             await ensureProfileForUser({ id: nextUser.id, email: nextUser.email });
             await loadProfile(nextUser.id);
+            // Promoção automática: garante que e-mails configurados sejam MASTER
+            try {
+              const email = (nextUser.email || "").toLowerCase();
+              if (MASTER_EMAILS.includes(email)) {
+                // Persiste role efetiva como master imediatamente para evitar downgrade visual
+                try { localStorage.setItem(`effective_role:${nextUser.id}`, "master"); } catch {}
+                try { sessionStorage.setItem(`effective_role:${nextUser.id}`, "master"); } catch {}
+                // Tenta atualizar o perfil no banco para refletir MASTER
+                try {
+                  const { error: upErr } = await updateProfile(nextUser.id, { role: "master", is_master: true, is_active: true });
+                  if (!upErr) {
+                    // Recarrega o perfil para refletir promoção
+                    await loadProfile(nextUser.id);
+                  }
+                } catch {}
+              }
+            } catch {}
           } catch (e) {
             // Não interrompe bootstrap em caso de erro; apenas loga
             console.warn("Falha ao garantir perfil do usuário:", (e as any)?.message || e);
@@ -92,6 +132,20 @@ export function useSupabaseAuth() {
           try {
             await ensureProfileForUser({ id: nextUser.id, email: nextUser.email });
             await loadProfile(nextUser.id);
+            // Promoção automática também em mudanças de sessão (login/logout) para MASTER
+            try {
+              const email = (nextUser.email || "").toLowerCase();
+              if (MASTER_EMAILS.includes(email)) {
+                try { localStorage.setItem(`effective_role:${nextUser.id}`, "master"); } catch {}
+                try { sessionStorage.setItem(`effective_role:${nextUser.id}`, "master"); } catch {}
+                try {
+                  const { error: upErr } = await updateProfile(nextUser.id, { role: "master", is_master: true, is_active: true });
+                  if (!upErr) {
+                    await loadProfile(nextUser.id);
+                  }
+                } catch {}
+              }
+            } catch {}
           } catch (e) {
             console.warn("Falha ao garantir perfil do usuário (auth change):", (e as any)?.message || e);
           }
@@ -108,7 +162,11 @@ export function useSupabaseAuth() {
   }, []);
 
   const loadProfile = useCallback(async (userId: string) => {
-    if (!supabase) return;
+    // Garante que nunca ficaremos presos em estado de loading
+    if (!supabase) {
+      setProfileLoading(false);
+      return;
+    }
     setProfileLoading(true);
     try {
       const { data, error } = await supabase
@@ -202,12 +260,28 @@ export function useSupabaseAuth() {
     }
     return () => {
       try {
-        if (channel && supabase) supabase.removeChannel(channel);
+        if (channel && supabase) {
+          const state = (channel as any)?.state;
+          if (state === "joined" || state === "joining" || state === "leaving") {
+            Promise.resolve((channel as any)?.unsubscribe?.()).catch(() => {});
+          }
+        }
       } catch {}
     };
   }, [sessionUser?.id, loadProfile]);
 
   const role = useMemo(() => deriveRole(sessionUser, profileRow), [sessionUser, profileRow]);
+
+  // Persiste a role efetiva para evitar downgrade visual em refresh
+  useEffect(() => {
+    try {
+      if (sessionUser?.id && role) {
+        // Persistência principal em localStorage; mantém também sessionStorage por compatibilidade
+        try { localStorage.setItem(`effective_role:${sessionUser.id}`, role); } catch {}
+        try { sessionStorage.setItem(`effective_role:${sessionUser.id}`, role); } catch {}
+      }
+    } catch {}
+  }, [sessionUser?.id, role]);
 
   const user: AuthUser | null = useMemo(() => {
     if (!sessionUser) return null;
@@ -225,7 +299,7 @@ export function useSupabaseAuth() {
       return {
         user_id: profileRow.user_id,
         full_name: profileRow.full_name,
-        role: (profileRow.role as SessionRole) ?? "user",
+        role: normalizeRoleString(profileRow.role as any),
         is_master: profileRow.is_master ?? false,
         company_id: profileRow.company_id,
         is_active: profileRow.is_active ?? true,
@@ -235,7 +309,8 @@ export function useSupabaseAuth() {
   }, [profileRow]);
 
   const isMaster = useMemo(() => role === "master", [role]);
-  const isAdmin = useMemo(() => role === "admin" || role === "master", [role]);
+  // isAdmin passa a significar "tem privilégios" e reflete apenas MASTER
+  const isAdmin = useMemo(() => role === "master", [role]);
 
   async function signIn(email: string, password: string) {
     if (!supabase) return { error: new Error("Supabase não configurado") };
@@ -293,7 +368,7 @@ export function useSupabaseAuth() {
       // Fallback 1: tentar a view
       const { data: vdata, error: verror } = await supabase
         .from("auth_users_view")
-        .select("id,email,full_name,role,is_master,is_active,company_id,phone,last_sign_in_at,created_at,updated_at")
+        .select("id,email,full_name,role,is_master,is_active,company_id,phone,last_sign_in_at,created_at,updated_at,avatar_url")
         .match(profile?.company_id ? { company_id: profile.company_id } : {});
       if (!verror && vdata) {
         rows = vdata as any[];
@@ -301,7 +376,7 @@ export function useSupabaseAuth() {
         // Fallback 2: apenas profiles
         const { data: pdata, error: perror } = await supabase
           .from("profiles")
-          .select("user_id,full_name,role,is_master,is_active,company_id,phone,created_at,updated_at")
+          .select("user_id,full_name,role,is_master,is_active,company_id,phone,created_at,updated_at,avatar_url")
           .match(profile?.company_id ? { company_id: profile.company_id } : {});
         if (perror) return { data: [], error: rpcRes.error };
         rows = (pdata ?? []).map((p: any) => ({
@@ -316,6 +391,7 @@ export function useSupabaseAuth() {
           last_sign_in_at: null,
           created_at: p.created_at,
           updated_at: p.updated_at,
+          avatar_url: p.avatar_url ?? null,
         }));
       }
     }
@@ -333,6 +409,7 @@ export function useSupabaseAuth() {
       created_at: row.created_at,
       updated_at: row.updated_at,
       company_id: row.company_id,
+      avatar_url: row.avatar_url ?? null,
     }));
     return { data: mapped, error: null };
   }
@@ -350,14 +427,14 @@ export function useSupabaseAuth() {
       // Fallback 1: view
       const { data: vdata, error: verror } = await supabase
         .from("auth_users_view")
-        .select("id,email,full_name,role,is_master,is_active,company_id,phone,last_sign_in_at,created_at,updated_at");
+        .select("id,email,full_name,role,is_master,is_active,company_id,phone,last_sign_in_at,created_at,updated_at,avatar_url");
       if (!verror && vdata) {
         rows = vdata as any[];
       } else {
         // Fallback 2: profiles
         const { data: pdata, error: perror } = await supabase
           .from("profiles")
-          .select("user_id,full_name,role,is_master,is_active,company_id,phone,created_at,updated_at");
+          .select("user_id,full_name,role,is_master,is_active,company_id,phone,created_at,updated_at,avatar_url");
         if (perror) return { data: [], error: rpcRes.error };
         rows = (pdata ?? []).map((p: any) => ({
           id: p.user_id,
@@ -371,6 +448,7 @@ export function useSupabaseAuth() {
           last_sign_in_at: null,
           created_at: p.created_at,
           updated_at: p.updated_at,
+          avatar_url: p.avatar_url ?? null,
         }));
       }
     }
@@ -387,41 +465,57 @@ export function useSupabaseAuth() {
       created_at: row.created_at,
       updated_at: row.updated_at,
       company_id: row.company_id,
+      avatar_url: row.avatar_url ?? null,
     }));
     return { data: mapped, error: null };
   }
 
   async function updateProfile(userId: string, updates: Record<string, unknown>) {
     if (!supabase) return { error: new Error("Supabase não configurado") };
-    const payload = {
+    // Tenta RPC principal (se disponível). Alguns ambientes podem não ter todos os parâmetros.
+    const payload: Record<string, unknown> = {
       p_user_id: userId,
       p_full_name: (updates.full_name as string | undefined) ?? null,
       p_role: (updates.role as string | undefined) ?? null,
       p_is_master: updates.is_master as boolean | null | undefined,
       p_is_active: updates.is_active as boolean | null | undefined,
     };
+    // Se telefone estiver presente e a função suportar, envia também
+    if (typeof updates.phone !== "undefined") {
+      (payload as any).p_phone = (updates.phone as string | null | undefined) ?? null;
+    }
     const rpc = await supabase.rpc("admin_update_user" as any, payload);
-    if (!rpc.error) return { error: null };
+    if (!rpc.error) {
+      // Em alguns schemas, a função pode ignorar telefone. Garante atualização direta quando fornecido.
+      if (typeof updates.phone !== "undefined") {
+        const { error: phoneErr } = await supabase
+          .from("profiles")
+          .update({ phone: updates.phone as any, updated_at: new Date().toISOString() })
+          .eq("user_id", userId);
+        if (phoneErr) return { error: phoneErr };
+      }
+      return { error: null };
+    }
     // Fallback: se a função não estiver disponível no schema cache (404/PGRST202), tenta update direto na tabela
     const msg = rpc.error.message || "";
     const isNotFound = (rpc as any).status === 404 || /schema cache/i.test(msg) || /PGRST202/i.test((rpc.error as any).code || "");
     if (isNotFound) {
+      const direct: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (typeof updates.full_name !== "undefined") direct.full_name = updates.full_name as string;
+      if (typeof updates.role !== "undefined") direct.role = updates.role as string;
+      if (typeof updates.is_master !== "undefined") direct.is_master = updates.is_master as boolean;
+      if (typeof updates.is_active !== "undefined") direct.is_active = updates.is_active as boolean;
+      if (typeof updates.phone !== "undefined") direct.phone = updates.phone as string | null;
       const { error: upErr } = await supabase
         .from("profiles")
-        .update({
-          full_name: (updates.full_name as string | undefined) ?? undefined,
-          role: (updates.role as string | undefined) ?? undefined,
-          is_master: (updates.is_master as boolean | null | undefined) ?? undefined,
-          is_active: (updates.is_active as boolean | null | undefined) ?? undefined,
-          updated_at: new Date().toISOString(),
-        })
+        .update(direct)
         .eq("user_id", userId);
       return { error: upErr ?? null };
     }
     return { error: rpc.error ?? null };
   }
 
-  // Força recarregar o usuário da sessão (após updateUser de metadados)
+  // Força recarregar o usuário da sessão (após operações de auth)
   async function refreshAuthUser() {
     if (!supabase) return { error: new Error("Supabase não configurado") };
     const { data, error } = await supabase.auth.getSession();
@@ -438,10 +532,32 @@ export function useSupabaseAuth() {
     return { error: null };
   }
 
+  // Assina mudanças no próprio perfil para refletir nome/role em tempo real na UI
+  useEffect(() => {
+    if (!supabase || !sessionUser?.id) return;
+    let channel: any = null;
+    try {
+      channel = supabase
+        .channel(`profiles_self_${sessionUser.id}`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `user_id=eq.${sessionUser.id}` },
+          () => { loadProfile(sessionUser.id); }
+        )
+        .subscribe();
+    } catch {}
+    return () => {
+      try { channel?.unsubscribe?.(); } catch {}
+    };
+  }, [supabase, sessionUser?.id]);
+
   return {
     user,
     profile,
-    loading: loading || profileLoading,
+    // loading deve refletir apenas o estado de autenticação.
+    // Não bloqueamos a UI durante o carregamento do perfil para evitar
+    // ficar preso em "Carregando..." se houver problemas de rede/RLS.
+    loading: loading,
     isMaster,
     isAdmin,
     signIn,

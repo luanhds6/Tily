@@ -8,7 +8,7 @@ export interface User {
   name: string;
   email: string;
   password: string;
-  role: "master" | "admin" | "user";
+  role: "master" | "user";
   active: boolean;
   avatar?: string;
   department?: string;
@@ -18,7 +18,7 @@ export interface Session {
   id: string;
   name: string;
   email: string;
-  role: "master" | "admin" | "user";
+  role: "master" | "user";
 }
 
 function uid(prefix = "id") {
@@ -54,9 +54,9 @@ function ensureSeedData() {
       {
         id: uid("u"),
         name: "Carlos Silva",
-        email: "admin@local",
-        password: "admin123",
-        role: "admin",
+        email: "carlos@local",
+        password: "user123",
+        role: "user",
         active: true,
         department: "Suporte",
       },
@@ -64,8 +64,8 @@ function ensureSeedData() {
         id: uid("u"),
         name: "Ana Santos",
         email: "ana@local",
-        password: "admin123",
-        role: "admin",
+        password: "user123",
+        role: "user",
         active: true,
         department: "Suporte",
       },
@@ -145,7 +145,8 @@ export function useAuth() {
   };
 
   const getAdminUsers = () => {
-    return users.filter((u) => (u.role === "admin" || u.role === "master") && u.active);
+    // Agora "admin" não existe; retorna somente Masters
+    return users.filter((u) => u.role === "master" && u.active);
   };
 
   return {
@@ -157,7 +158,7 @@ export function useAuth() {
     updateUser,
     deleteUser,
     getAdminUsers,
-    isAdmin: session?.role === "admin" || session?.role === "master",
+    isAdmin: session?.role === "master",
     isMaster: session?.role === "master",
     setMyAvatar,
   };

@@ -19,8 +19,7 @@ export default function SeedTestUsersPage() {
       setBusy(true);
 
       const testUsers = [
-        { email: "master.teste@example.com", password: "Teste@123", full_name: "Usuário Master Teste", role: "admin" as const, is_master: true },
-        { email: "admin.teste@example.com", password: "Teste@123", full_name: "Usuário Admin Teste", role: "admin" as const, is_master: false },
+        { email: "master.teste@example.com", password: "Teste@123", full_name: "Usuário Master Teste", role: "master" as const, is_master: true },
         { email: "comum.teste@example.com", password: "Teste@123", full_name: "Usuário Comum Teste", role: "user" as const, is_master: false },
       ];
 
@@ -76,7 +75,7 @@ export default function SeedTestUsersPage() {
       <div className="w-full max-w-xl border rounded-md p-4">
         <h1 className="text-lg font-semibold mb-3">Seed: Usuários de Teste</h1>
         <p className="text-sm text-muted-foreground mb-4">
-          Criando três usuários de teste (master, admin e comum) via função segura.
+          Criando dois usuários de teste (master e comum) via função segura.
         </p>
         {busy && <div className="text-sm text-muted-foreground">Processando...</div>}
         {done && (

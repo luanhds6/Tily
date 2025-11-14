@@ -28,7 +28,10 @@ export function useRealtimeMessages(onInsert: (row: MessageRow) => void) {
 
     return () => {
       try {
-        supabase.removeChannel(channel);
+        const state = (channel as any)?.state;
+        if (state === "joined" || state === "joining" || state === "leaving") {
+          Promise.resolve((channel as any)?.unsubscribe?.()).catch(() => {});
+        }
       } catch {}
     };
   }, [onInsert]);

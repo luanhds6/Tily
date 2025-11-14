@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { AlertCircle, Info, Wrench } from "lucide-react";
 
 export function InformativosView({ session }: { session: Session }) {
-  const isAdmin = session.role === "admin" || session.role === "master";
+const isAdmin = session.role === "master";
   const { items, createInformativo } = useInformativos();
 
   const [title, setTitle] = useState("");

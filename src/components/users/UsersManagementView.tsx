@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 interface UsersManagementViewProps {
   users: User[];
   currentUser: User;
-  onCreateUser: (data: { name: string; email: string; password: string; role: "user" | "admin" }) => void;
+  onCreateUser: (data: { name: string; email: string; password: string; role: "user" | "master" }) => void;
   onUpdateUser: (id: string, updates: Partial<User>) => void;
   onDeleteUser: (id: string) => void;
 }
@@ -28,7 +28,7 @@ export function UsersManagementView({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"user" | "admin">("user");
+  const [role, setRole] = useState<"user" | "master">("user");
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { toast } = useToast();
@@ -74,11 +74,11 @@ export function UsersManagementView({
   };
 
   const handleChangeRole = (user: User) => {
-    const newRole = user.role === "admin" ? "user" : "admin";
+    const newRole = user.role === "master" ? "user" : "master";
     onUpdateUser(user.id, { role: newRole });
     toast({
       title: "Papel alterado",
-      description: `${user.name} agora é ${newRole === "admin" ? "Administrador" : "Usuário"}`,
+      description: `${user.name} agora é ${newRole === "master" ? "Master" : "Usuário"}`,
     });
   };
 
@@ -94,7 +94,6 @@ export function UsersManagementView({
 
   const getRoleIcon = (role: string) => {
     if (role === "master") return <Shield className="h-4 w-4" />;
-    if (role === "admin") return <Shield className="h-4 w-4" />;
     return <UserIcon className="h-4 w-4" />;
   };
 
@@ -106,13 +105,7 @@ export function UsersManagementView({
           Master
         </Badge>
       );
-    if (role === "admin")
-      return (
-        <Badge className="bg-blue-500 text-white">
-          <Shield className="h-3 w-3 mr-1" />
-          Admin
-        </Badge>
-      );
+    
     return (
       <Badge variant="secondary">
         <UserIcon className="h-3 w-3 mr-1" />
@@ -124,7 +117,7 @@ export function UsersManagementView({
   const userStats = {
     total: users.length,
     active: users.filter((u) => u.active).length,
-    admins: users.filter((u) => u.role === "admin" || u.role === "master").length,
+    admins: users.filter((u) => u.role === "master").length,
     users: users.filter((u) => u.role === "user").length,
   };
 
@@ -187,13 +180,13 @@ export function UsersManagementView({
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="role">Papel</Label>
-                  <Select value={role} onValueChange={(v) => setRole(v as "user" | "admin")}>
+                  <Select value={role} onValueChange={(v) => setRole(v as "user" | "master")}>
                     <SelectTrigger id="role">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="user">Usuário</SelectItem>
-                      <SelectItem value="admin">Administrador</SelectItem>
+                      <SelectItem value="master">Master</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -242,14 +235,14 @@ export function UsersManagementView({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
           <div className="p-4 border-b border-border">
-            <h3 className="font-semibold">Administradores</h3>
+            <h3 className="font-semibold">Masters</h3>
           </div>
           <div className="divide-y divide-border">
-            {filteredUsers.filter((u) => u.role === "admin" || u.role === "master").length === 0 ? (
-              <div className="p-6 text-center text-muted-foreground">Nenhum administrador encontrado</div>
+            {filteredUsers.filter((u) => u.role === "master").length === 0 ? (
+              <div className="p-6 text-center text-muted-foreground">Nenhum master encontrado</div>
             ) : (
               filteredUsers
-                .filter((u) => u.role === "admin" || u.role === "master")
+                .filter((u) => u.role === "master")
                 .map((user) => (
                   <div key={user.id} className="p-4 hover:bg-muted/50 transition-colors">
                     <div className="flex items-center justify-between gap-4">
@@ -276,7 +269,7 @@ export function UsersManagementView({
                           <Button variant="outline" size="sm" onClick={() => handleToggleActive(user)} title={user.active ? "Desativar" : "Ativar"}>
                             {user.active ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
                           </Button>
-                          <Button variant="outline" size="sm" onClick={() => handleChangeRole(user)} title={user.role === "admin" ? "Tornar usuário" : "Tornar admin"}>
+                          <Button variant="outline" size="sm" onClick={() => handleChangeRole(user)} title={user.role === "master" ? "Tornar usuário" : "Tornar master"}>
                             <Edit className="h-4 w-4" />
                           </Button>
                           <Button variant="destructive" size="sm" onClick={() => handleDeleteUser(user)} title="Excluir usuário">
@@ -327,7 +320,7 @@ export function UsersManagementView({
                           <Button variant="outline" size="sm" onClick={() => handleToggleActive(user)} title={user.active ? "Desativar" : "Ativar"}>
                             {user.active ? <Ban className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
                           </Button>
-                          <Button variant="outline" size="sm" onClick={() => handleChangeRole(user)} title="Tornar admin">
+                          <Button variant="outline" size="sm" onClick={() => handleChangeRole(user)} title="Tornar master">
                             <Edit className="h-4 w-4" />
                           </Button>
                           <Button variant="destructive" size="sm" onClick={() => handleDeleteUser(user)} title="Excluir usuário">

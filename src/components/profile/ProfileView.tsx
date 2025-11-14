@@ -102,10 +102,9 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
                 <h2 className="text-xl font-bold text-foreground">{editing ? formData.name : (profile?.full_name ?? formData.name ?? session.name)}</h2>
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-1 ${
                   session.role === "master" ? "bg-warning/10 text-warning" :
-                  session.role === "admin" ? "bg-primary/10 text-primary" :
                   "bg-muted text-muted-foreground"
                 }`}>
-                  {session.role === "master" ? "Master" : session.role === "admin" ? "Administrador" : "Usuário"}
+                  {session.role === "master" ? "Master" : "Usuário"}
                 </span>
               </div>
             </div>
@@ -130,9 +129,11 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
                 <input
                   type="email"
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full border border-input bg-background px-3 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  readOnly
+                  disabled
+                  className="w-full border border-input bg-muted px-3 py-2 rounded-lg cursor-not-allowed"
                 />
+                <p className="text-xs text-muted-foreground mt-1">O e-mail é gerenciado pelo Auth e não pode ser alterado aqui.</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Foto de perfil</label>
@@ -243,21 +244,14 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
                           }
                         }
 
-                        // Se o email foi alterado, atualiza no Supabase (pode exigir confirmação)
-                        if (formData.email && formData.email !== session.email) {
-                          const { error: emailErr } = await supabase.auth.updateUser({ email: formData.email });
-                          if (emailErr) {
-                            // Não aborta todo o fluxo: informa que o email não foi atualizado
-                            toast({ title: "Email não atualizado", description: emailErr.message });
-                          }
-                        }
+                        // Removido: não atualiza e-mail via Supabase Auth. Apenas nome/avatar no banco.
 
                          toast({ title: "Perfil atualizado", description: "Suas alterações foram salvas no banco." });
                          // Recarrega o profile para refletir o novo nome/avatar
                          await reloadProfile();
                        } else {
-                         // Fallback: atualiza store local quando Supabase não está configurado
-                         updateUser(session.id, { name: formData.name, email: formData.email });
+                         // Fallback: atualiza store local quando Supabase não está configurado (somente nome)
+                         updateUser(session.id, { name: formData.name });
                          toast({ title: "Perfil atualizado", description: "Alterações salvas localmente." });
                        }
                        setEditing(false);
@@ -338,9 +332,7 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
                 <div>
                   <p className="text-xs text-muted-foreground">Função</p>
                   <p className="text-sm font-medium text-foreground">
-                    {session.role === "master" ? "Administrador Master" :
-                     session.role === "admin" ? "Administrador" :
-                     "Usuário"}
+                    {session.role === "master" ? "Master" : "Usuário"}
                   </p>
                 </div>
               </div>

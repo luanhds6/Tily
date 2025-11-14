@@ -11,7 +11,7 @@ import { useNotificationCenter } from "@/hooks/useNotificationCenter";
 
 interface ChatFloatingProps {
   session: Session;
-  users: Array<{ id: string; name: string; role: string }>;
+  users: Array<{ id: string; name: string; role: string; avatar?: string }>;
 }
 
 interface AttachmentPreview {
@@ -22,7 +22,7 @@ interface AttachmentPreview {
 }
 
 export function ChatFloating({ session, users }: ChatFloatingProps) {
-  const isAdmin = session.role === "admin" || session.role === "master";
+const isAdmin = session.role === "master";
   const isUser = session.role === "user";
   const [open, setOpen] = useState(false);
   const [selectedPeerId, setSelectedPeerId] = useState<string>("");

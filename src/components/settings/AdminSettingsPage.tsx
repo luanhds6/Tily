@@ -4,7 +4,6 @@ import ProfilesManagementView from "@/components/users/ProfilesManagementView";
 import { ProfileView } from "@/components/profile/ProfileView";
 import { SettingsView } from "@/components/settings/SettingsView";
 import AccessCategoriesView from "@/components/settings/AccessCategoriesView";
-import BusinessUnitsView from "@/components/settings/BusinessUnitsView";
 import { Session, User } from "@/hooks/useAuth";
 import { Ticket } from "@/hooks/useTickets";
 
@@ -12,7 +11,7 @@ interface AdminSettingsPageProps {
   session: Session;
   users: User[];
   tickets: Ticket[];
-  onCreateUser: (data: { name: string; email: string; password: string; role: "user" | "admin" }) => void;
+  onCreateUser: (data: { name: string; email: string; password: string; role: "user" | "master" }) => void;
   onUpdateUser: (id: string, updates: Partial<User>) => void;
   onDeleteUser: (id: string) => void;
 }
@@ -41,7 +40,6 @@ export default function AdminSettingsPage({
           <TabsTrigger value="users">Usuários</TabsTrigger>
           <TabsTrigger value="profile">Perfil</TabsTrigger>
           <TabsTrigger value="settings">Preferências</TabsTrigger>
-          <TabsTrigger value="units">Unidades</TabsTrigger>
           {isMaster && <TabsTrigger value="access">Acesso</TabsTrigger>}
         </TabsList>
 
@@ -77,9 +75,6 @@ export default function AdminSettingsPage({
           )}
         </TabsContent>
 
-        <TabsContent value="units">
-          <BusinessUnitsView />
-        </TabsContent>
       </Tabs>
     </div>
   );

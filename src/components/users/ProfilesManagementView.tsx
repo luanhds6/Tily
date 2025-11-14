@@ -30,7 +30,7 @@ export default function ProfilesManagementView() {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
-  const [role, setInviteRole] = useState<"user" | "admin">("user");
+  const [role, setInviteRole] = useState<"user">("user");
   const [inviteMaster, setInviteMaster] = useState<boolean>(false);
   const [inviting, setInviting] = useState<boolean>(false);
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
@@ -44,7 +44,7 @@ export default function ProfilesManagementView() {
   const [resetEmail, setResetEmail] = useState<string>("");
   const [opMsg, setOpMsg] = useState<string>("");
   const [opBusy, setOpBusy] = useState<boolean>(false);
-  const [editForm, setEditForm] = useState<{ full_name: string; phone: string; role: "user" | "admin"; unitId: string } | null>(null);
+  const [editForm, setEditForm] = useState<{ full_name: string; phone: string; unitId: string } | null>(null);
 
   async function refresh() {
     setState({ loading: true, error: null });
@@ -90,7 +90,7 @@ export default function ProfilesManagementView() {
 
   // Separar perfis em duas colunas: Administradores/Master (esquerda) e Usuários comuns (direita)
   const adminProfiles = useMemo(() => {
-    return displayedProfiles.filter((p) => p.is_master || p.role === "admin");
+    return displayedProfiles.filter((p) => p.is_master);
   }, [displayedProfiles]);
   const userProfiles = useMemo(() => {
     return displayedProfiles.filter((p) => !p.is_master && p.role === "user");
@@ -152,13 +152,20 @@ export default function ProfilesManagementView() {
     if (!error) refresh();
   }
 
-  async function setRole(userId: string, role: "user" | "admin") {
-    const { error } = await updateProfile(userId, { role });
-    if (!error) refresh();
-  }
+  // Removido: não há mais papel "admin"; todos são "user" e Master via is_master
 
   async function setMaster(userId: string, value: boolean) {
     const { error } = await updateProfile(userId, { is_master: value });
+    if (!error) refresh();
+  }
+
+  // Ajustar tipo de acesso (user | master)
+  async function setAccessType(userId: string, access: "user" | "master") {
+    if (access === "master" && !isMaster) return;
+    const payload: any = access === "master"
+      ? { is_master: true, role: "user" }
+      : { is_master: false, role: "user" };
+    const { error } = await updateProfile(userId, payload);
     if (!error) refresh();
   }
 
@@ -216,7 +223,7 @@ export default function ProfilesManagementView() {
     setResetEmail(p?.email ?? "");
     setEditOpen(true);
     const unitId = unitAssignments[p.user_id] ?? "";
-    setEditForm({ full_name: p.full_name ?? "", phone: p.phone ?? "", role: (p.is_master ? "admin" : (p.role as any)) ?? "user", unitId });
+    setEditForm({ full_name: p.full_name ?? "", phone: p.phone ?? "", unitId });
   }
 
   async function handleResetPassword() {
@@ -294,11 +301,11 @@ export default function ProfilesManagementView() {
     }
   }
 
-  // Atualizar presença (apenas o próprio admin/master)
+  // Atualizar presença (apenas o próprio Master)
   async function setPresenceStatus(userId: string, status: "online" | "offline" | "away") {
     if (!supabase) return;
-    // Segurança básica de UI: só permite alterar o próprio status se admin/master
-    if (!(me?.user_id === userId && (me?.role === "admin" || me?.is_master))) return;
+    // Segurança básica de UI: só permite alterar o próprio status se Master
+    if (!(me?.user_id === userId && me?.is_master)) return;
     const { error } = await supabase
       .from("profiles")
       .update({ presence_status: status, last_seen_at: new Date().toISOString() })
@@ -351,7 +358,7 @@ export default function ProfilesManagementView() {
         password: password.trim(),
         full_name: fullName || null,
         phone: phone || null,
-        role: role,
+        role: "user",
         is_master: isMaster ? inviteMaster : false,
       },
     });
@@ -398,9 +405,9 @@ export default function ProfilesManagementView() {
     <div className="p-4">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-semibold">Gestão de Perfis (Supabase)</h2>
+          <h2 className="text-xl font-semibold">Gestão de Usuários</h2>
           <p className="text-sm text-muted-foreground">
-            Administre os perfis da empresa: ativação, cargos e master.
+            Administre os perfis da empresa: ativação e acesso Master.
           </p>
         </div>
         {isMaster && (
@@ -463,17 +470,7 @@ export default function ProfilesManagementView() {
                 placeholder="Defina a senha inicial"
               />
             </div>
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Cargo</label>
-              <select
-                className="w-full border rounded px-2 py-1"
-                value={role}
-                onChange={(e) => setInviteRole(e.target.value as any)}
-              >
-                <option value="user">Usuário</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
+            {/* Sem cargo: somente Usuário; acesso Master via checkbox abaixo */}
             <div>
               <label className="block text-xs text-muted-foreground mb-1">Unidade de negócio</label>
               <select
@@ -536,25 +533,25 @@ export default function ProfilesManagementView() {
             </div>
           </div>
 
-          {/* Duas colunas: Administradores (esquerda) e Usuários (direita) */}
+          {/* Duas colunas: Masters (esquerda) e Usuários (direita) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3">
-            {/* Coluna de Administradores */}
+            {/* Coluna de Masters */}
             <div className="border rounded-md overflow-x-auto">
               <div className="px-3 py-2 border-b">
-                <h3 className="font-semibold">Administradores</h3>
+                <h3 className="font-semibold">Masters</h3>
               </div>
               <table className="min-w-full text-sm">
                 <thead className="bg-muted">
                   <tr>
                     <th className="text-left px-3 py-2">Nome</th>
-                    <th className="text-left px-3 py-2">Unidade</th>
+                    <th className="text-left px-3 py-2">Tipo de acesso</th>
                     <th className="text-left px-3 py-2">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {adminProfiles.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-4 text-center text-muted-foreground" colSpan={3}>Nenhum administrador encontrado</td>
+                      <td className="px-3 py-4 text-center text-muted-foreground" colSpan={3}>Nenhum Master encontrado</td>
                     </tr>
                   ) : (
                     adminProfiles.map((p) => (
@@ -571,13 +568,11 @@ export default function ProfilesManagementView() {
                         <td className="px-3 py-2">
                           <select
                             className="border rounded px-2 py-1 text-sm"
-                            value={unitAssignments[p.user_id] ?? ""}
-                            onChange={(e) => setUserUnit(p.user_id, e.target.value || null)}
+                            value={p.is_master ? "master" : "user"}
+                            onChange={(e) => setAccessType(p.user_id, e.target.value as any)}
                           >
-                            <option value="">Sem unidade</option>
-                            {units.map((u) => (
-                              <option key={u.id} value={u.id}>{u.name}</option>
-                            ))}
+                            <option value="user">Usuário</option>
+                            {isMaster && <option value="master">Master</option>}
                           </select>
                         </td>
                         <td className="px-3 py-2 space-x-2">
@@ -705,11 +700,7 @@ export default function ProfilesManagementView() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs mb-1 opacity-90">Tipo de acesso</label>
-                  <select className="w-full rounded px-3 py-2 bg-blue-800 text-white border border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400" value={editForm?.role || "user"} onChange={(e) => setEditForm((f) => f ? { ...f, role: e.target.value as any } : f)}>
-                    <option value="user">Usuário</option>
-                    <option value="admin">Admin</option>
-                  </select>
+                  {/* Tipo de acesso agora é somente Usuário; Master é controlado via coluna principal */}
                 </div>
               </div>
 

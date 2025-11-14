@@ -2,13 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+// Tabs removidos: coluna direita passa a mostrar criação de sala e histórico
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Session } from "@/hooks/useAuth";
 import { useMeetingRoom } from "@/hooks/useMeetingRoom";
 import { useChat } from "@/hooks/useChat";
 import { supabase, isSupabaseEnabled } from "@/lib/supabase";
-import { Video, Mic, MicOff, Camera, CameraOff, ScreenShare, Hand, MessageSquare, X, Upload, Folder, Expand, Minimize, PhoneOff, LockKeyhole, Plus } from "lucide-react";
+import { Video, Mic, MicOff, Camera, CameraOff, ScreenShare, Hand, MessageSquare, X, Expand, Minimize, PhoneOff, LockKeyhole, Plus, Trash2, History } from "lucide-react";
 
 type MeetingsPageProps = {
   session: Session;
@@ -25,6 +25,10 @@ export default function MeetingsPage({ session }: MeetingsPageProps) {
   const ROOMS_KEY = "meeting_rooms_v1";
   const [rooms, setRooms] = useState<Array<{ id: string; name: string; password?: string | null; createdBy: string; createdAt: string }>>(() => {
     try { return JSON.parse(localStorage.getItem(ROOMS_KEY) || "[]"); } catch { return []; }
+  });
+  const HISTORY_KEY = "meeting_history_v1";
+  const [history, setHistory] = useState<Array<{ roomId: string; roomName: string; topic: string | null; endedAt: string }>>(() => {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); } catch { return []; }
   });
 
   const roomId = useMemo(() => roomName.trim().toLowerCase().replace(/\s+/g, "-"), [roomName]);
@@ -113,6 +117,19 @@ export default function MeetingsPage({ session }: MeetingsPageProps) {
     setCreating(false);
   }
 
+  function deleteRoomByName(nameInput?: string) {
+    const raw = (nameInput ?? newRoomName ?? "").trim() || roomName.trim();
+    if (!raw) return;
+    const id = raw.toLowerCase().replace(/\s+/g, "-");
+    const exists = rooms.some((r) => r.id === id);
+    if (!exists) return;
+    const next = rooms.filter((r) => r.id !== id);
+    persistRooms(next);
+    if (roomId === id) {
+      setRoomName("");
+    }
+  }
+
   async function tryJoinSelectedRoom(id: string, name: string) {
     const info = rooms.find((r) => r.id === id);
     if (info?.password) {
@@ -123,7 +140,28 @@ export default function MeetingsPage({ session }: MeetingsPageProps) {
       }
     }
     setRoomName(name);
-    setTimeout(() => { joinRoom(); }, 100);
+    // Não entrar automaticamente; o usuário deve clicar em "Abrir reunião instantânea"
+  }
+
+  function addHistoryEntry(topic?: string | null) {
+    const entry = { roomId, roomName, topic: (topic || "").trim() || null, endedAt: new Date().toISOString() };
+    try {
+      const prev = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+      const next = [entry, ...prev];
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+      setHistory(next);
+    } catch {
+      setHistory((h) => [entry, ...h]);
+    }
+  }
+
+  async function endMeeting() {
+    try {
+      const topic = window.prompt("Informe o tópico da reunião ao encerrar (opcional):") || "";
+      addHistoryEntry(topic);
+    } finally {
+      leaveRoom();
+    }
   }
 
   async function startRecording() {
@@ -250,27 +288,31 @@ export default function MeetingsPage({ session }: MeetingsPageProps) {
         {/* Esquerda: Salas + Chamada de vídeo */}
         <div className="flex flex-col gap-4 h-full">
           <Card className="p-3">
-            <div className="flex items-center gap-2">
-              <Input value={roomName} onChange={(e) => setRoomName(e.target.value)} placeholder="Nome da sala" />
+            <div className="flex flex-wrap items-center gap-2">
+              <Input className="flex-1 min-w-[220px]" value={roomName} onChange={(e) => setRoomName(e.target.value)} placeholder="Nome da sala" />
               {!joined ? (
-                <Button onClick={joinRoom} title="Entrar na sala"><Video className="w-4 h-4 mr-2" /> Entrar</Button>
+                <Button className="w-full sm:w-auto" onClick={joinRoom} title="Abrir reunião instantânea"><Video className="w-4 h-4 mr-2" /> Abrir reunião instantânea</Button>
               ) : (
-                <Button variant="destructive" onClick={leaveRoom} title="Encerrar reunião"><PhoneOff className="w-4 h-4 mr-2" /> Encerrar</Button>
+                <Button className="w-full sm:w-auto" variant="destructive" onClick={endMeeting} title="Encerrar reunião"><PhoneOff className="w-4 h-4 mr-2" /> Encerrar</Button>
               )}
-              <Button variant="outline" onClick={() => setExpanded((e) => !e)} title={expanded ? "Minimizar" : "Expandir"}>
-                {expanded ? <Minimize className="w-4 h-4" /> : <Expand className="w-4 h-4" />}
-              </Button>
-              <Button variant="outline" onClick={() => setShowChat((c) => !c)} title={showChat ? "Ocultar chat" : "Mostrar chat"}>
-                <MessageSquare className="w-4 h-4" />
-              </Button>
-              {!recording ? (
-                <Button variant="outline" onClick={startRecording} title="Iniciar gravação">
-                  <Video className="w-4 h-4 mr-2" /> Gravar
-                </Button>
-              ) : (
-                <Button variant="destructive" onClick={stopRecording} title="Encerrar gravação">
-                  <Video className="w-4 h-4 mr-2" /> Encerrar gravação
-                </Button>
+              {joined && (
+                <>
+                  <Button variant="outline" onClick={() => setExpanded((e) => !e)} title={expanded ? "Minimizar" : "Expandir"}>
+                    {expanded ? <Minimize className="w-4 h-4" /> : <Expand className="w-4 h-4" />}
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowChat((c) => !c)} title={showChat ? "Ocultar chat" : "Mostrar chat"}>
+                    <MessageSquare className="w-4 h-4" />
+                  </Button>
+                  {!recording ? (
+                    <Button variant="outline" onClick={startRecording} title="Iniciar gravação">
+                      <Video className="w-4 h-4 mr-2" /> Gravar
+                    </Button>
+                  ) : (
+                    <Button variant="destructive" onClick={stopRecording} title="Encerrar gravação">
+                      <Video className="w-4 h-4 mr-2" /> Encerrar gravação
+                    </Button>
+                  )}
+                </>
               )}
             </div>
             {error && <div className="mt-2 text-sm text-destructive">{error}</div>}
@@ -281,6 +323,7 @@ export default function MeetingsPage({ session }: MeetingsPageProps) {
             )}
           </Card>
 
+          {joined && (
           <div className={`grid ${showChat ? "grid-cols-1 xl:grid-cols-[1fr_340px]" : "grid-cols-1"} gap-4 flex-1 min-h-0`}>
             <Card className="p-3 flex flex-col">
               {/* Grade de vídeos */}
@@ -335,20 +378,14 @@ export default function MeetingsPage({ session }: MeetingsPageProps) {
               </Card>
             )}
           </div>
+          )}
 
-          {/* Salas disponíveis + criação */}
+          {/* Salas disponíveis */}
           <Card className="p-3">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <div className="text-xs text-muted-foreground">Salas disponíveis</div>
-              <Button size="sm" variant="outline" onClick={() => setCreating((c) => !c)}><Plus className="w-3 h-3 mr-1" /> Criar sala</Button>
+              <Button className="w-full sm:w-auto" size="sm" variant="outline" onClick={() => setCreating((c) => !c)}><Plus className="w-3 h-3 mr-1" /> Criar sala</Button>
             </div>
-            {creating && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
-                <Input placeholder="Nome da sala" value={newRoomName} onChange={(e) => setNewRoomName(e.target.value)} />
-                <Input placeholder="Senha (opcional)" value={newRoomPassword} onChange={(e) => setNewRoomPassword(e.target.value)} />
-                <Button onClick={createRoom}>Salvar</Button>
-              </div>
-            )}
             <div className="flex flex-wrap gap-2">
               {rooms.map((r) => (
                 <Button key={r.id} variant="outline" size="sm" onClick={() => tryJoinSelectedRoom(r.id, r.name)} title={r.password ? "Sala com senha" : "Sala aberta"}>
@@ -367,27 +404,47 @@ export default function MeetingsPage({ session }: MeetingsPageProps) {
           </Card>
         </div>
 
-        {/* Direita: Fichários / backups */}
-        <div className={`${expanded ? "order-last" : ""} flex flex-col h-full min-h-0`}>
+        {/* Direita: criação de sala e histórico */}
+        <div className={`${expanded ? "order-last" : ""} flex flex-col gap-4 h-full min-h-0`}>
+          <Card className="p-3">
+            <div className="font-semibold mb-2">Criar sala</div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <Input className="w-full" placeholder="Nome da sala" value={newRoomName} onChange={(e) => setNewRoomName(e.target.value)} />
+              <Input className="w-full" placeholder="Senha (opcional)" value={newRoomPassword} onChange={(e) => setNewRoomPassword(e.target.value)} />
+              <div className="flex flex-col md:flex-row gap-2 min-w-0">
+                <Button onClick={createRoom} className="w-full md:flex-1"><Plus className="w-4 h-4 mr-2" /> Salvar</Button>
+                {creating && (
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    onClick={() => deleteRoomByName()}
+                    className="w-full md:w-auto"
+                    title="Excluir sala"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+          </Card>
+
           <Card className="p-3 flex-1 min-h-0">
-            <Tabs defaultValue="docs" className="h-full flex flex-col">
-              <TabsList className="grid grid-cols-2 w-full">
-                <TabsTrigger value="docs"><Folder className="w-3 h-3 mr-1" /> Fichários</TabsTrigger>
-                <TabsTrigger value="upload"><Upload className="w-3 h-3 mr-1" /> Upload</TabsTrigger>
-              </TabsList>
-              <TabsContent value="docs" className="flex-1 overflow-y-auto p-2">
-                <DocsList roomId={roomId} />
-              </TabsContent>
-              <TabsContent value="upload" className="p-2">
-                <div className="space-y-2">
-                  <input id="meeting-upload" type="file" multiple onChange={(e) => handleUpload(e.target.files)} />
-                  <div className="text-xs text-muted-foreground">Arquivos serão enviados para Supabase Storage (bucket 'meetings') quando configurado; caso contrário, serão salvos localmente.</div>
-                  {uploadStatus && (
-                    <pre className="text-xs whitespace-pre-wrap bg-muted/30 p-2 rounded border">{uploadStatus}</pre>
-                  )}
+            <div className="flex items-center gap-2 mb-2">
+              <History className="w-4 h-4" />
+              <div className="font-semibold">Histórico de reuniões encerradas</div>
+            </div>
+            <div className="space-y-2 max-h-[40vh] overflow-y-auto">
+              {history.length === 0 && (
+                <div className="text-xs text-muted-foreground">Nenhuma reunião encerrada ainda.</div>
+              )}
+              {history.map((h, idx) => (
+                <div key={idx} className="border rounded p-2 text-sm">
+                  <div className="font-medium">{h.roomName || h.roomId}</div>
+                  <div className="text-xs text-muted-foreground">Encerrada em {new Date(h.endedAt).toLocaleString("pt-BR")}</div>
+                  {h.topic && <div className="text-xs">Tópico: {h.topic}</div>}
                 </div>
-              </TabsContent>
-            </Tabs>
+              ))}
+            </div>
           </Card>
         </div>
       </div>
@@ -413,10 +470,10 @@ function ChatInput({ onSend }: { onSend: (text: string) => void }) {
   return (
     <form
       onSubmit={(e) => { e.preventDefault(); const t = text.trim(); if (!t) return; onSend(t); setText(""); }}
-      className="mt-2 flex items-center gap-2"
+      className="mt-2 flex flex-wrap items-center gap-2"
     >
-      <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Digite uma mensagem" />
-      <Button type="submit"><MessageSquare className="w-4 h-4 mr-2" /> Enviar</Button>
+      <Input className="flex-1 min-w-[200px]" value={text} onChange={(e) => setText(e.target.value)} placeholder="Digite uma mensagem" />
+      <Button className="w-full sm:w-auto" type="submit"><MessageSquare className="w-4 h-4 mr-2" /> Enviar</Button>
     </form>
   );
 }

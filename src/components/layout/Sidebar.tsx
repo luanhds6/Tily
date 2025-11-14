@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Home, Ticket, Users, BarChart3, BookOpen, Settings, LogOut, Menu, X, UserCircle, MessageSquare, AlertCircle, Link as LinkIcon, Globe, FileText, Mail, Bookmark, ChevronUp, ChevronDown, Video } from "lucide-react";
+import { Home, Ticket, Users, BarChart3, BookOpen, Settings, LogOut, Menu, X, UserCircle, MessageSquare, AlertCircle, Link as LinkIcon, Globe, FileText, Mail, Bookmark, ChevronUp, ChevronDown } from "lucide-react";
 import { Session } from "../../hooks/useAuth";
 import { useAccessControl } from "@/hooks/useAccessControl";
 import BrandLogo from "@/components/ui/BrandLogo";
@@ -15,7 +15,7 @@ interface SidebarProps {
 export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const isAdmin = session && (session.role === "admin" || session.role === "master");
+  const isAdmin = session && (session.role === "master");
   const isMaster = session && session.role === "master";
   const access = useAccessControl(session || null);
 
@@ -84,7 +84,6 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
     { id: "dashboard", label: "Dashboard", icon: Home, show: !!perms["dashboard"] },
     { id: "chamados", label: "Chamados", icon: Ticket, show: !!perms["tickets"] },
     { id: "chat", label: "Chat", icon: MessageSquare, show: !!perms["chat"] },
-    { id: "meetings", label: "Reuniões", icon: Video, show: !!perms["meetings"] },
     { id: "informativos", label: "Informativos", icon: AlertCircle, show: !!perms["informativos"] },
     { id: "links", label: "Links Úteis", icon: LinkIcon, show: !!perms["quick_links"] },
     { id: "analytics", label: "Relatórios", icon: BarChart3, show: isAdmin || !!perms["analytics"] },
@@ -115,10 +114,9 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
           <div className="mt-2 flex justify-center">
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
               session.role === "master" ? "bg-warning/10 text-warning" : 
-              session.role === "admin" ? "bg-primary/10 text-primary" : 
               "bg-muted text-muted-foreground"
             }`}>
-              {session.role === "master" ? "Master" : session.role === "admin" ? "Admin" : "Usuário"}
+              {session.role === "master" ? "Master" : "Usuário"}
             </span>
           </div>
         )}
