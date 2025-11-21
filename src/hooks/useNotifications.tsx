@@ -10,7 +10,9 @@ export function isNotificationSupported() {
 
 export async function requestNotificationPermission() {
   if (!isNotificationSupported()) return "denied";
+  // Do not re-request if already denied or granted to avoid browser warnings
   if (Notification.permission === "granted") return "granted";
+  if (Notification.permission === "denied") return "denied";
   try {
     return await Notification.requestPermission();
   } catch (e) {

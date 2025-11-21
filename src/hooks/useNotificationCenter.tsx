@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useMemo, useState } from "react";
 
 export type NotificationCategory = "chat" | "ticket" | "informativo";
 
@@ -20,22 +20,7 @@ type Ctx = {
   clear: () => void;
 };
 
-const LS_KEY = "sc_notifications_v1";
-
-function loadJSON<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function saveJSON(key: string, data: any) {
-  try {
-    localStorage.setItem(key, JSON.stringify(data));
-  } catch {}
-}
+// Persistência local removida: notificações são efêmeras em memória
 
 function uid(prefix = "n") {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
@@ -44,11 +29,7 @@ function uid(prefix = "n") {
 const NotificationCenterContext = createContext<Ctx | null>(null);
 
 export function NotificationCenterProvider({ children }: { children: React.ReactNode }) {
-  const [notifications, setNotifications] = useState<NotificationItem[]>(() => loadJSON(LS_KEY, []));
-
-  useEffect(() => {
-    saveJSON(LS_KEY, notifications);
-  }, [notifications]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 

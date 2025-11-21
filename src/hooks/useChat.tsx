@@ -11,22 +11,7 @@ export interface ChatMessage {
   attachments?: Array<{ name: string; type: string; dataUrl: string; size?: number }>
 }
 
-const LS_CHAT = "sc_chat_v1";
-
-function loadJSON(key: string, fallback: any) {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function saveJSON(key: string, data: any) {
-  try {
-    localStorage.setItem(key, JSON.stringify(data));
-  } catch {}
-}
+// Removido fallback local: chat sincronizado somente via Supabase
 
 function uid(prefix = "c") {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
@@ -64,10 +49,8 @@ export function useChat(initialRoomId: string) {
             attachments: r.attachments || [],
           }))
         );
-      } else {
-        const store = loadJSON(LS_CHAT, {} as Record<string, ChatMessage[]>);
-        setMessages((store[roomId] || []).sort((a, b) => a.createdAt.localeCompare(b.createdAt)));
       }
+      // Sem fallback local
     };
     load();
     return () => {
@@ -138,12 +121,8 @@ export function useChat(initialRoomId: string) {
         attachments: msg.attachments || [],
       });
       if (error) console.error("Erro ao enviar mensagem de chat:", error);
-    } else {
-      const store = loadJSON(LS_CHAT, {} as Record<string, ChatMessage[]>);
-      const roomMsgs = store[roomId] || [];
-      store[roomId] = [...roomMsgs, msg];
-      saveJSON(LS_CHAT, store);
     }
+    // Sem fallback local
   };
 
   return { roomId, setRoomId, messages, sendMessage };

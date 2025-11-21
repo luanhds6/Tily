@@ -15,9 +15,9 @@ interface SidebarProps {
 export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const isAdmin = session && (session.role === "master");
-  const isMaster = session && session.role === "master";
   const access = useAccessControl(session || null);
+  const isAdmin = !!access?.perms && access.perms.role === "master";
+  const isMaster = isAdmin;
 
   type QuickLink = {
     id: string;
@@ -26,7 +26,6 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
     icon: string;
   };
 
-  const LS_QUICK_LINKS = "sc_quick_links_v1";
   const ICONS_MAP = {
     link: LinkIcon,
     globe: Globe,
@@ -61,19 +60,13 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
                 icon: row.icon || "link",
               }));
               setQuickLinks(mapped);
-              try { localStorage.setItem(LS_QUICK_LINKS, JSON.stringify(mapped)); } catch {}
               return;
             }
           }
         } catch {}
       }
-      // Fallback: localStorage
-      try {
-        const raw = localStorage.getItem(LS_QUICK_LINKS);
-        setQuickLinks(raw ? (JSON.parse(raw) as QuickLink[]) : []);
-      } catch {
-        setQuickLinks([]);
-      }
+      // Sem fallback local: Supabase obrigatório
+      setQuickLinks([]);
     }
     load();
     return () => { active = false; };
@@ -113,10 +106,10 @@ export function Sidebar({ session, view, onViewChange, onLogout }: SidebarProps)
         {session && (
           <div className="mt-2 flex justify-center">
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-              session.role === "master" ? "bg-warning/10 text-warning" : 
+              isAdmin ? "bg-warning/10 text-warning" : 
               "bg-muted text-muted-foreground"
             }`}>
-              {session.role === "master" ? "Master" : "Usuário"}
+              {isAdmin ? "Master" : "Usuário"}
             </span>
           </div>
         )}

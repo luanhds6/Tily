@@ -38,8 +38,7 @@ type QuickLinkFolder = {
   links?: QuickLink[]; // links pertencentes exclusivamente à pasta
 };
 
-const LS_QUICK_LINKS = "sc_quick_links_v1";
-const LS_QUICK_LINK_FOLDERS = "sc_quick_link_folders_v1";
+// Removido armazenamento local: Quick Links são gerenciados apenas via Supabase
 
 const ICONS_MAP = {
   link: LinkIcon,
@@ -61,35 +60,7 @@ const ICON_OPTIONS: { key: keyof typeof ICONS_MAP; label: string }[] = [
   { key: "bookmark", label: "Favorito" },
 ];
 
-function loadLinksLocal(): QuickLink[] {
-  try {
-    const raw = localStorage.getItem(LS_QUICK_LINKS);
-    return raw ? (JSON.parse(raw) as QuickLink[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveLinksLocal(links: QuickLink[]) {
-  try {
-    localStorage.setItem(LS_QUICK_LINKS, JSON.stringify(links));
-  } catch {}
-}
-
-function loadFoldersLocal(): QuickLinkFolder[] {
-  try {
-    const raw = localStorage.getItem(LS_QUICK_LINK_FOLDERS);
-    return raw ? (JSON.parse(raw) as QuickLinkFolder[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveFoldersLocal(folders: QuickLinkFolder[]) {
-  try {
-    localStorage.setItem(LS_QUICK_LINK_FOLDERS, JSON.stringify(folders));
-  } catch {}
-}
+// Armazenamento local removido
 
 export function QuickLinksView({ session }: { session: Session | null }) {
   const { toast } = useToast();
@@ -103,7 +74,7 @@ export function QuickLinksView({ session }: { session: Session | null }) {
 
   // Usa a role efetiva do hook de controle de acesso
   const access = useAccessControl(session);
-const isAdmin = (access?.perms?.role === "master");
+  const isAdmin = !!access?.perms && access.perms.role === "master";
 
   // Form state
   const [title, setTitle] = useState("");
@@ -118,23 +89,23 @@ const isAdmin = (access?.perms?.role === "master");
   useEffect(() => {
     let active = true;
     async function load() {
-      // Se Supabase estiver habilitado, carrega do banco por empresa
+      // Carrega do Supabase por empresa
       if (isSupabaseEnabled && supabase) {
         try {
           const { data: company, error: compErr } = await getCurrentCompany();
           if (compErr || !company) {
-            setLinks(loadLinksLocal());
-            setFolders(loadFoldersLocal());
+            setLinks([]);
+            setFolders([]);
             return;
           }
           const { data, error } = await (supabase as any)
             .from("quick_links")
-            .select("id,title,url,icon,created_at")
+            .select("id,title,url,icon,folder_id,created_at")
             .eq("company_id", company.id)
             .order("created_at", { ascending: false });
           if (error) {
-            setLinks(loadLinksLocal());
-            setFolders(loadFoldersLocal());
+            setLinks([]);
+            setFolders([]);
             return;
           }
           const mapped: QuickLink[] = (data ?? []).map((row: any) => ({
@@ -142,43 +113,47 @@ const isAdmin = (access?.perms?.role === "master");
             title: row.title,
             url: row.url,
             icon: row.icon || "link",
+            folderId: row.folder_id || undefined,
           }));
+          let folderRows: any[] = [];
+          try {
+            const { data: fData, error: fErr } = await (supabase as any)
+              .from("quick_link_folders")
+              .select("id,name,visibility,created_at,quick_link_folder_members(user_id)")
+              .eq("company_id", company.id)
+              .order("created_at", { ascending: false });
+            if (!fErr && Array.isArray(fData)) folderRows = fData as any[];
+          } catch {}
+          const linksByFolder = new Map<string, QuickLink[]>();
+          mapped.forEach((l) => {
+            if (l.folderId) {
+              const arr = linksByFolder.get(l.folderId) || [];
+              arr.push(l);
+              linksByFolder.set(l.folderId, arr);
+            }
+          });
           if (active) {
             setLinks(mapped);
-            // cache local para fallback rápido
-            saveLinksLocal(mapped);
-            // Pastas são gerenciadas localmente por enquanto
-            const localFolders = loadFoldersLocal();
-            // Normaliza estrutura: garante allowedUserIds
-            const normalized = (localFolders || []).map((f) => ({
-              ...f,
-              allowedUserIds: f.allowedUserIds ?? [],
-              links: f.links ?? [],
+            const foldersMapped: QuickLinkFolder[] = (folderRows || []).map((r: any) => ({
+              id: r.id,
+              name: r.name,
+              visibility: (r.visibility as any) || "public",
+              createdAt: r.created_at,
+              allowedUserIds: ((r.quick_link_folder_members || []) as any[]).map((m: any) => m.user_id),
+              links: linksByFolder.get(r.id) || [],
             }));
-            setFolders(normalized);
+            setFolders(foldersMapped);
           }
           return;
         } catch {
-          setLinks(loadLinksLocal());
-          const localFolders = loadFoldersLocal();
-          const normalized = (localFolders || []).map((f) => ({
-            ...f,
-            allowedUserIds: f.allowedUserIds ?? [],
-            links: f.links ?? [],
-          }));
-          setFolders(normalized);
+          setLinks([]);
+          setFolders([]);
           return;
         }
       }
-      // Fallback: localStorage
-      setLinks(loadLinksLocal());
-      const localFolders = loadFoldersLocal();
-      const normalized = (localFolders || []).map((f) => ({
-        ...f,
-        allowedUserIds: f.allowedUserIds ?? [],
-        links: f.links ?? [],
-      }));
-      setFolders(normalized);
+      // Sem fallback local: Supabase é obrigatório
+      setLinks([]);
+      setFolders([]);
     }
     load();
     return () => {
@@ -216,7 +191,7 @@ const isAdmin = (access?.perms?.role === "master");
       icon: iconKey,
     };
 
-    // Supabase: salvar no banco
+    // Salvar no Supabase
     if (isSupabaseEnabled && supabase) {
       try {
         const { data: company } = await getCurrentCompany();
@@ -236,7 +211,6 @@ const isAdmin = (access?.perms?.role === "master");
           };
           const next = [newLink, ...links];
           setLinks(next);
-          saveLinksLocal(next);
           setTitle("");
           setUrl("");
           toast({ title: "Link adicionado", description: `${newLink.title} (salvo no Supabase)` });
@@ -247,15 +221,7 @@ const isAdmin = (access?.perms?.role === "master");
         toast({ title: "Falha ao salvar no Supabase", description: err?.message ?? "Erro inesperado" });
       }
     }
-
-    // Fallback local
-    const newLink: QuickLink = { id: Math.random().toString(36).slice(2), folderId: undefined, ...baseNew };
-    const next = [newLink, ...links];
-    setLinks(next);
-    saveLinksLocal(next);
-    setTitle("");
-    setUrl("");
-    toast({ title: "Link adicionado", description: `${newLink.title} (salvo localmente)` });
+    // Sem fallback local
     setSaving(false);
   };
 
@@ -275,7 +241,6 @@ const isAdmin = (access?.perms?.role === "master");
     }
     const next = links.filter((l) => l.id !== id);
     setLinks(next);
-    saveLinksLocal(next);
     toast({ title: "Link removido" });
   };
 
@@ -306,18 +271,32 @@ const isAdmin = (access?.perms?.role === "master");
                       toast({ title: "Informe o nome da pasta" });
                       return;
                     }
-                const folder: QuickLinkFolder = {
-                  id: Math.random().toString(36).slice(2),
-                  name,
-                  visibility: newFolderVisibility,
-                  createdAt: new Date().toISOString(),
-                  allowedUserIds: [],
-                };
-                const next = [folder, ...folders];
-                setFolders(next);
-                saveFoldersLocal(next);
-                setNewFolderName("");
-                    toast({ title: "Pasta criada", description: folder.name });
+                    (async () => {
+                      try {
+                        const { data: company } = await getCurrentCompany();
+                        if (!company?.id) throw new Error("Empresa não encontrada");
+                        const { data, error } = await (supabase as any)
+                          .from("quick_link_folders")
+                          .insert({ name, visibility: newFolderVisibility, company_id: company.id })
+                          .select("id,name,visibility,created_at")
+                          .maybeSingle();
+                        if (error) throw error;
+                        const folder: QuickLinkFolder = {
+                          id: data.id,
+                          name: data.name,
+                          visibility: (data.visibility as any) || "public",
+                          createdAt: data.created_at,
+                          allowedUserIds: [],
+                          links: [],
+                        };
+                        const next = [folder, ...folders];
+                        setFolders(next);
+                        setNewFolderName("");
+                        toast({ title: "Pasta criada", description: folder.name });
+                      } catch (err: any) {
+                        toast({ title: "Falha ao criar pasta", description: err?.message ?? "Erro inesperado" });
+                      }
+                    })();
                   }}
                 >
                   <div className="md:col-span-3">
@@ -385,15 +364,28 @@ const isAdmin = (access?.perms?.role === "master");
                               onClick={() => {
                                 const confirmed = window.confirm("Deseja realmente excluir esta pasta? Os links serão movidos para 'Acesso rápido'.");
                                 if (!confirmed) return;
-                                // Remove pasta e migra links para avulsos
-                                const nextFolders = folders.filter((f) => f.id !== folder.id);
-                                const migrated = (folder.links ?? []).map((l) => ({ ...l, folderId: undefined }));
-                                const nextLinks = [...migrated, ...links];
-                                setFolders(nextFolders);
-                                setLinks(nextLinks);
-                                saveFoldersLocal(nextFolders);
-                                saveLinksLocal(nextLinks);
-                                toast({ title: "Pasta excluída", description: `Links migrados para Acesso rápido` });
+                                (async () => {
+                                  try {
+                                    const { error: upErr } = await (supabase as any)
+                                      .from("quick_links")
+                                      .update({ folder_id: null })
+                                      .eq("folder_id", folder.id);
+                                    if (upErr) throw upErr;
+                                    const { error: delErr } = await (supabase as any)
+                                      .from("quick_link_folders")
+                                      .delete()
+                                      .eq("id", folder.id);
+                                    if (delErr) throw delErr;
+                                    const nextFolders = folders.filter((f) => f.id !== folder.id);
+                                    const migrated = (folder.links ?? []).map((l) => ({ ...l, folderId: undefined }));
+                                    const nextLinks = [...migrated, ...links];
+                                    setFolders(nextFolders);
+                                    setLinks(nextLinks);
+                                    toast({ title: "Pasta excluída", description: `Links migrados para Acesso rápido` });
+                                  } catch (err: any) {
+                                    toast({ title: "Falha ao excluir pasta", description: err?.message ?? "Erro inesperado" });
+                                  }
+                                })();
                               }}
                             >
                               <Trash2 className="w-4 h-4" />
@@ -421,13 +413,24 @@ const isAdmin = (access?.perms?.role === "master");
                                       className="rounded-full bg-destructive text-destructive-foreground h-5 w-5 flex items-center justify-center"
                                       title="Remover acesso"
                                       onClick={() => {
-                                        const nextFolders = folders.map((f) => (
-                                          f.id === folder.id
-                                            ? { ...f, allowedUserIds: (f.allowedUserIds ?? []).filter((id) => id !== uid) }
-                                            : f
-                                        ));
-                                        setFolders(nextFolders);
-                                        saveFoldersLocal(nextFolders);
+                                        (async () => {
+                                          try {
+                                            const { error } = await (supabase as any)
+                                              .from("quick_link_folder_members")
+                                              .delete()
+                                              .eq("folder_id", folder.id)
+                                              .eq("user_id", uid);
+                                            if (error) throw error;
+                                            const nextFolders = folders.map((f) => (
+                                              f.id === folder.id
+                                                ? { ...f, allowedUserIds: (f.allowedUserIds ?? []).filter((id) => id !== uid) }
+                                                : f
+                                            ));
+                                            setFolders(nextFolders);
+                                          } catch (err: any) {
+                                            toast({ title: "Falha ao remover acesso", description: err?.message ?? "Erro inesperado" });
+                                          }
+                                        })();
                                       }}
                                     >
                                       ×
@@ -462,15 +465,24 @@ const isAdmin = (access?.perms?.role === "master");
                                   const sel = grantUserByFolder[folder.id];
                                   if (!sel) return;
                                   if ((folder.allowedUserIds ?? []).includes(sel)) return;
-                                  const nextFolders = folders.map((f) => (
-                                    f.id === folder.id
-                                      ? { ...f, allowedUserIds: [...(f.allowedUserIds ?? []), sel] }
-                                      : f
-                                  ));
-                                  setFolders(nextFolders);
-                                  saveFoldersLocal(nextFolders);
-                                  setGrantUserByFolder((prev) => ({ ...prev, [folder.id]: "" }));
-                                  toast({ title: "Acesso concedido", description: "Usuário autorizado para a pasta" });
+                                  (async () => {
+                                    try {
+                                      const { error } = await (supabase as any)
+                                        .from("quick_link_folder_members")
+                                        .insert({ folder_id: folder.id, user_id: sel });
+                                      if (error) throw error;
+                                      const nextFolders = folders.map((f) => (
+                                        f.id === folder.id
+                                          ? { ...f, allowedUserIds: [...(f.allowedUserIds ?? []), sel] }
+                                          : f
+                                      ));
+                                      setFolders(nextFolders);
+                                      setGrantUserByFolder((prev) => ({ ...prev, [folder.id]: "" }));
+                                      toast({ title: "Acesso concedido", description: "Usuário autorizado para a pasta" });
+                                    } catch (err: any) {
+                                      toast({ title: "Falha ao conceder acesso", description: err?.message ?? "Erro inesperado" });
+                                    }
+                                  })();
                                 }}
                               >
                                 Conceder
@@ -488,24 +500,37 @@ const isAdmin = (access?.perms?.role === "master");
                               toast({ title: "Preencha nome e URL" });
                               return;
                             }
-                            // Pastas: por enquanto armazenadas localmente
-                            const newLink: QuickLink = {
-                              id: Math.random().toString(36).slice(2),
-                              title: title.trim(),
-                              url: url.trim(),
-                              icon: iconKey,
-                            };
-                            const nextFolders = folders.map((f) => (
-                              f.id === folder.id
-                                ? { ...f, links: [newLink, ...(f.links ?? [])] }
-                                : f
-                            ));
-                            setFolders(nextFolders);
-                            saveFoldersLocal(nextFolders);
-                            setTitle("");
-                            setUrl("");
-                            setAddingLinkInFolderId(null);
-                            toast({ title: "Link adicionado na pasta", description: newLink.title });
+                            (async () => {
+                              try {
+                                const { data: company } = await getCurrentCompany();
+                                if (!company?.id) throw new Error("Empresa não encontrada");
+                                const { data, error } = await (supabase as any)
+                                  .from("quick_links")
+                                  .insert({ title: title.trim(), url: url.trim(), icon: iconKey, company_id: company.id, folder_id: folder.id })
+                                  .select("id,title,url,icon,folder_id,created_at")
+                                  .maybeSingle();
+                                if (error) throw error;
+                                const newLink: QuickLink = {
+                                  id: data.id,
+                                  title: data.title,
+                                  url: data.url,
+                                  icon: data.icon || "link",
+                                  folderId: data.folder_id || folder.id,
+                                };
+                                const nextFolders = folders.map((f) => (
+                                  f.id === folder.id
+                                    ? { ...f, links: [newLink, ...(f.links ?? [])] }
+                                    : f
+                                ));
+                                setFolders(nextFolders);
+                                setTitle("");
+                                setUrl("");
+                                setAddingLinkInFolderId(null);
+                                toast({ title: "Link adicionado na pasta", description: newLink.title });
+                              } catch (err: any) {
+                                toast({ title: "Falha ao adicionar link", description: err?.message ?? "Erro inesperado" });
+                              }
+                            })();
                           }}
                         >
                           <div className="md:col-span-2">
@@ -561,10 +586,26 @@ const isAdmin = (access?.perms?.role === "master");
                                 {isAdmin && (
                                   <button
                                     onClick={() => {
-                                      const next = links.filter((x) => x.id !== l.id);
-                                      setLinks(next);
-                                      saveLinksLocal(next);
-                                      toast({ title: "Link removido" });
+                                      (async () => {
+                                        try {
+                                          const { error } = await (supabase as any)
+                                            .from("quick_links")
+                                            .delete()
+                                            .eq("id", l.id);
+                                          if (error) throw error;
+                                          const next = links.filter((x) => x.id !== l.id);
+                                          setLinks(next);
+                                          const nextFolders = folders.map((f) => (
+                                            f.id === folder.id
+                                              ? { ...f, links: (f.links || []).filter((x) => x.id !== l.id) }
+                                              : f
+                                          ));
+                                          setFolders(nextFolders);
+                                          toast({ title: "Link removido" });
+                                        } catch (err: any) {
+                                          toast({ title: "Falha ao remover link", description: err?.message ?? "Erro inesperado" });
+                                        }
+                                      })();
                                     }}
                                     className="absolute -top-2 -right-2 hidden group-hover:flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow hover:bg-destructive/90"
                                     title="Remover"

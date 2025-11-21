@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Session } from "@/hooks/useAuth";
+import { useAccessControl } from "@/hooks/useAccessControl";
 import { useChat } from "@/hooks/useChat";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,8 +23,9 @@ interface AttachmentPreview {
 }
 
 export function ChatFloating({ session, users }: ChatFloatingProps) {
-const isAdmin = session.role === "master";
-  const isUser = session.role === "user";
+  const access = useAccessControl(session);
+  const isAdmin = !!access?.perms && access.perms.role === "master";
+  const isUser = !!access?.perms && access.perms.role === "user";
   const [open, setOpen] = useState(false);
   const [selectedPeerId, setSelectedPeerId] = useState<string>("");
   const [search, setSearch] = useState("");

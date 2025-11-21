@@ -4,8 +4,8 @@ import { useNavigate } from "react-router-dom";
 
 export default function SeedMasterPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("luanhenriquesm7@gmail.com");
-  const [password, setPassword] = useState("=1m3QR8;");
+  const [email, setEmail] = useState("ti@servbrasil.com.br");
+  const [password, setPassword] = useState("125463");
   const [fullName, setFullName] = useState("Luan TI");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);

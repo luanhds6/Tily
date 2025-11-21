@@ -15,29 +15,14 @@ export type Informativo = {
   createdByName: string;
 };
 
-const LS_KEY = "sc_informativos_v1";
-
-function loadJSON<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function saveJSON(key: string, data: any) {
-  try {
-    localStorage.setItem(key, JSON.stringify(data));
-  } catch {}
-}
+// Armazenamento local removido: informativos são gerenciados exclusivamente via Supabase
 
 function uid(prefix = "i") {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export function useInformativos() {
-  const [items, setItems] = useState<Informativo[]>(() => loadJSON(LS_KEY, []));
+  const [items, setItems] = useState<Informativo[]>([]);
   const { addNotification } = useNotificationCenter();
 
   // Load from Supabase when available
@@ -68,10 +53,7 @@ export function useInformativos() {
     load();
   }, []);
 
-  // Persist local when not using Supabase
-  useEffect(() => {
-    if (!isSupabaseEnabled) saveJSON(LS_KEY, items);
-  }, [items]);
+  // Sem persistência local
 
   // Subscribe to new informativos
   useEffect(() => {
@@ -136,8 +118,6 @@ export function useInformativos() {
         created_by_name: info.createdByName,
       });
       if (error) console.error("Erro ao criar informativo:", error);
-    } else {
-      saveJSON(LS_KEY, [info, ...items]);
     }
   };
 

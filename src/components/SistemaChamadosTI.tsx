@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAuth, Session as LegacySession } from "../hooks/useAuth";
+import { Session as LegacySession } from "../hooks/useAuth";
 import { useSupabaseAuth } from "../hooks/useSupabaseAuth";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useTickets } from "../hooks/useTickets";
@@ -36,8 +36,7 @@ function AppWithNotifications() {
   // Supabase auth (fonte de verdade para sessão)
   const { user, profile, loading, isAdmin, isMaster, signOut, listProfilesByCompany, listAllUsers } = useSupabaseAuth();
 
-  // Hooks locais existentes (usuários, tickets, etc.)
-  const { users, getAdminUsers, createUser, updateUser, deleteUser } = useAuth();
+  // Removido: hooks locais antigos (useAuth) não são mais usados para dados
   const { tickets, createTicket, updateTicket, addMessage, assignTicket, resolveTicket, deleteTicket, markTicketOpenedByAuthor, markTicketReplyReadByAuthor } = useTickets();
   const [view, setView] = useState<string>(() => {
     const params = new URLSearchParams(location.search);
@@ -51,10 +50,6 @@ function AppWithNotifications() {
   
   // Converte sessão Supabase para sessão legada esperada pelos componentes
   const session: LegacySession | null = useMemo(() => {
-    if (!isSupabaseEnabled) {
-      // Modo local (sem Supabase): fornece sessão master para navegação e testes
-      return { id: "local_master", name: "Usuário Local", email: "local@dev", role: "master" } as LegacySession;
-    }
     if (!user) return null;
     return {
       id: user.id,
@@ -112,11 +107,7 @@ function AppWithNotifications() {
   useEffect(() => {
     let active = true;
     async function loadChatUsers() {
-      if (!isSupabaseEnabled) {
-        // Fallback para usuários locais quando Supabase não está habilitado
-        setChatUsers(users.map(u => ({ id: u.id, name: u.name, role: u.role, avatar: u.avatar })));
-        return;
-      }
+      // Supabase obrigatório: sem fallback local
       try {
         const { data, error } = await listAllUsers();
         if (error) {
@@ -165,10 +156,8 @@ function AppWithNotifications() {
 
   // Lista de usuários utilizada pela UI (Tickets, ChatFloating) deve ser memoizada
   const usersForUI = useMemo(() => (
-    isSupabaseEnabled
-      ? chatUsers.map(u => ({ id: u.id, name: u.name, email: "", password: "", role: u.role, active: true, avatar: u.avatar, department: undefined }))
-      : users
-  ), [isSupabaseEnabled, chatUsers, users]);
+    chatUsers.map(u => ({ id: u.id, name: u.name, email: "", password: "", role: u.role, active: true, avatar: u.avatar, department: undefined }))
+  ), [chatUsers]);
 
   // Usa a role efetiva vinda do access control para refletir corretamente na UI
   const displaySession: LegacySession | null = useMemo(() => {
@@ -277,9 +266,7 @@ function AppWithNotifications() {
     }
   });
 
-  const handleCreateUser = (data: { name: string; email: string; password: string; role: "user" | "master" }) => {
-    createUser({ ...data, active: true });
-  };
+  // Removido: criação de usuários via hooks locais. Gestão de perfis agora é via Supabase.
 
   // Sincroniza alterações no URL (ex: recarregar, edição manual)
   useEffect(() => {
@@ -351,8 +338,8 @@ function AppWithNotifications() {
     );
   }
 
-  // Usa admins do Supabase quando disponíveis; senão, fallback para admins locais
-  const agents = isSupabaseEnabled ? (supabaseAgents ?? []) : getAdminUsers();
+  // Usa admins do Supabase quando disponíveis; sem fallback local
+  const agents = supabaseAgents ?? [];
   const myTickets = tickets.filter(t => t.authorId === session?.id);
   const selectedTicket = selectedTicketId ? tickets.find(t => t.id === selectedTicketId) : null;
 
@@ -384,7 +371,7 @@ function AppWithNotifications() {
               <DashboardView tickets={tickets} session={displaySession!} agents={agents} onViewChange={handleViewChange} />
             );
           } else if (view === "chat" && access.perms.permissions["chat"]) {
-            content = <ChatView session={session} users={isSupabaseEnabled ? chatUsers : users} />;
+            content = <ChatView session={session} users={chatUsers} />;
           } else if (view === "chamados" && access.perms.permissions["tickets"]) {
             content = (
               <TicketsPage
@@ -430,11 +417,7 @@ function AppWithNotifications() {
               (access.perms.role === "master") ? (
                 <AdminSettingsPage
                   session={displaySession!}
-                  users={users}
                   tickets={tickets}
-                  onCreateUser={handleCreateUser}
-                  onUpdateUser={updateUser}
-                  onDeleteUser={deleteUser}
                 />
               ) : (
                 access.perms.permissions["settings"] ? <SettingsView /> : (

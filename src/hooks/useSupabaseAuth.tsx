@@ -39,23 +39,6 @@ function deriveRole(_user: User | null, profile: ProfileRow | null): SessionRole
     const normalized = normalizeRoleString((profile as any).role as string | null | undefined);
     if (normalized === "master") return "master";
   }
-  // Fallback: usar role efetiva persistida em sessão para evitar regressão após F5
-  try {
-    const userId = _user?.id;
-    if (userId) {
-      // Primeiro tenta localStorage (mais robusto entre origens/portas)
-      let stored = null;
-      try { stored = localStorage.getItem(`effective_role:${userId}`); } catch {}
-      // Backcompat: se não houver em localStorage, tenta sessionStorage
-      if (!stored) {
-        try { stored = sessionStorage.getItem(`effective_role:${userId}`); } catch {}
-      }
-      const v = (stored || "").toLowerCase();
-      if (v === "master") return "master";
-      // Backcompat: admin persistido vira master
-      if (v === "admin") return "master";
-    }
-  } catch {}
   return "user";
 }
 
@@ -94,23 +77,7 @@ export function useSupabaseAuth() {
           try {
             await ensureProfileForUser({ id: nextUser.id, email: nextUser.email });
             await loadProfile(nextUser.id);
-            // Promoção automática: garante que e-mails configurados sejam MASTER
-            try {
-              const email = (nextUser.email || "").toLowerCase();
-              if (MASTER_EMAILS.includes(email)) {
-                // Persiste role efetiva como master imediatamente para evitar downgrade visual
-                try { localStorage.setItem(`effective_role:${nextUser.id}`, "master"); } catch {}
-                try { sessionStorage.setItem(`effective_role:${nextUser.id}`, "master"); } catch {}
-                // Tenta atualizar o perfil no banco para refletir MASTER
-                try {
-                  const { error: upErr } = await updateProfile(nextUser.id, { role: "master", is_master: true, is_active: true });
-                  if (!upErr) {
-                    // Recarrega o perfil para refletir promoção
-                    await loadProfile(nextUser.id);
-                  }
-                } catch {}
-              }
-            } catch {}
+            // Sem autopromoção por e-mail: papel e privilégios são controlados apenas pelo Supabase
           } catch (e) {
             // Não interrompe bootstrap em caso de erro; apenas loga
             console.warn("Falha ao garantir perfil do usuário:", (e as any)?.message || e);
@@ -132,20 +99,7 @@ export function useSupabaseAuth() {
           try {
             await ensureProfileForUser({ id: nextUser.id, email: nextUser.email });
             await loadProfile(nextUser.id);
-            // Promoção automática também em mudanças de sessão (login/logout) para MASTER
-            try {
-              const email = (nextUser.email || "").toLowerCase();
-              if (MASTER_EMAILS.includes(email)) {
-                try { localStorage.setItem(`effective_role:${nextUser.id}`, "master"); } catch {}
-                try { sessionStorage.setItem(`effective_role:${nextUser.id}`, "master"); } catch {}
-                try {
-                  const { error: upErr } = await updateProfile(nextUser.id, { role: "master", is_master: true, is_active: true });
-                  if (!upErr) {
-                    await loadProfile(nextUser.id);
-                  }
-                } catch {}
-              }
-            } catch {}
+            // Sem autopromoção por e-mail: papel e privilégios são controlados apenas pelo Supabase
           } catch (e) {
             console.warn("Falha ao garantir perfil do usuário (auth change):", (e as any)?.message || e);
           }
@@ -272,16 +226,7 @@ export function useSupabaseAuth() {
 
   const role = useMemo(() => deriveRole(sessionUser, profileRow), [sessionUser, profileRow]);
 
-  // Persiste a role efetiva para evitar downgrade visual em refresh
-  useEffect(() => {
-    try {
-      if (sessionUser?.id && role) {
-        // Persistência principal em localStorage; mantém também sessionStorage por compatibilidade
-        try { localStorage.setItem(`effective_role:${sessionUser.id}`, role); } catch {}
-        try { sessionStorage.setItem(`effective_role:${sessionUser.id}`, role); } catch {}
-      }
-    } catch {}
-  }, [sessionUser?.id, role]);
+  // Não persistimos mais role efetiva no storage; confiamos somente nos dados do Supabase
 
   const user: AuthUser | null = useMemo(() => {
     if (!sessionUser) return null;

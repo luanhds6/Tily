@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Ticket } from "@/hooks/useTickets";
 import { Session, User } from "@/hooks/useAuth";
+import { useAccessControl } from "@/hooks/useAccessControl";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { TicketListView } from "./TicketListView";
 import { NewTicketForm } from "./NewTicketForm";
@@ -14,7 +15,8 @@ interface TicketsPageProps {
 }
 
 export function TicketsPage({ session, users, tickets, onTicketClick, onCreateTicket }: TicketsPageProps) {
-const isAdmin = session.role === "master";
+  const access = useAccessControl(session);
+  const isAdmin = !!access?.perms && access.perms.role === "master";
   const [tab, setTab] = useState<string>(isAdmin ? "todos" : "meus");
 
   const myTickets = tickets.filter((t) => t.authorId === session.id);

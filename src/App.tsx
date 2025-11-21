@@ -6,8 +6,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
-import SeedMasterPage from "./pages/SeedMaster";
-import SeedTestUsersPage from "./pages/SeedTestUsers";
 import SistemaChamadosTI from "./components/SistemaChamadosTI";
 import ErrorBoundary from "@/components/layout/ErrorBoundary";
 
@@ -30,8 +28,7 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             {/* Área interna do sistema */}
             <Route path="/app" element={<SistemaChamadosTI />} />
-            {import.meta.env.DEV && <Route path="/seed" element={<SeedMasterPage />} />}
-            {import.meta.env.DEV && <Route path="/seed-test-users" element={<SeedTestUsersPage />} />}
+            {/* Seed pages desativadas: criação só via Supabase/admin */}
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

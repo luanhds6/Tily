@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import { User as UserIcon, Mail, Shield, Calendar, Edit2, Save, X, ImagePlus, Trash2 } from "lucide-react";
-import { Session, useAuth } from "../../hooks/useAuth";
+import { Session } from "../../hooks/useAuth";
 import { useSupabaseAuth } from "@/hooks/useSupabaseAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Ticket } from "../../hooks/useTickets";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase, isSupabaseEnabled, ensureProfileForUser } from "@/lib/supabase";
+import { useAccessControl } from "@/hooks/useAccessControl";
 
 interface ProfileViewProps {
   session: Session;
@@ -19,13 +20,14 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
     name: session.name,
     email: session.email,
   });
-  const { users, setMyAvatar, updateUser } = useAuth();
   const { refreshAuthUser, reloadProfile, profile } = useSupabaseAuth();
-  const me = users.find((u) => u.id === session.id);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(me?.avatar || null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const { toast } = useToast();
   const AVATARS_BUCKET = (import.meta.env.VITE_SUPABASE_AVATARS_BUCKET as string | undefined) ?? "avatars";
+  const access = useAccessControl(session);
+  const isAdmin = access?.perms?.role === "master";
+  const roleLabel = isAdmin ? "Master" : "Usuário";
 
   async function blobToDataUrl(blob: Blob): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -59,11 +61,9 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
             if (url) setAvatarPreview(url);
           }
         } catch {}
-      } else if (me?.avatar) {
-        setAvatarPreview(me.avatar);
       }
     })();
-  }, [isSupabaseEnabled, me?.avatar]);
+  }, [isSupabaseEnabled, session.id]);
 
   const avgResponseTime = myResolvedTickets.length > 0
     ? myResolvedTickets.reduce((acc, t) => {
@@ -101,10 +101,9 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
               <div>
                 <h2 className="text-xl font-bold text-foreground">{editing ? formData.name : (profile?.full_name ?? formData.name ?? session.name)}</h2>
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium mt-1 ${
-                  session.role === "master" ? "bg-warning/10 text-warning" :
-                  "bg-muted text-muted-foreground"
+                  isAdmin ? "bg-warning/10 text-warning" : "bg-muted text-muted-foreground"
                 }`}>
-                  {session.role === "master" ? "Master" : "Usuário"}
+                  {roleLabel}
                 </span>
               </div>
             </div>
@@ -169,9 +168,6 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
                   type="button"
                   onClick={async () => {
                     try {
-                      // Atualiza avatar local imediatamente para feedback visual
-                      if (avatarPreview) setMyAvatar(avatarPreview);
-
                        // Se Supabase estiver habilitado, atualiza tabela profiles (sem metadata)
                        if (isSupabaseEnabled && supabase) {
                         let publicAvatarUrl: string | null = null;
@@ -198,7 +194,6 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
                             URL.revokeObjectURL(url);
                             return { blob: blob ?? file, ext };
                           }
-
                           const { blob: compressed, ext: outExt } = await compressImage(avatarFile);
                           const path = `${profile?.company_id ?? "_"}/${session.id}/${Date.now()}.${outExt}`;
                           const { error: upErr } = await supabase.storage.from(AVATARS_BUCKET).upload(path, compressed, { upsert: true });
@@ -214,9 +209,6 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
                           } else {
                             const { data: pub } = supabase.storage.from(AVATARS_BUCKET).getPublicUrl(path);
                             publicAvatarUrl = pub?.publicUrl ?? null;
-                          }
-                          if (publicAvatarUrl) {
-                            setMyAvatar(publicAvatarUrl);
                           }
                         }
                         // Garante que o perfil exista antes de atualizar
@@ -243,22 +235,16 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
                             throw profErr;
                           }
                         }
-
                         // Removido: não atualiza e-mail via Supabase Auth. Apenas nome/avatar no banco.
-
                          toast({ title: "Perfil atualizado", description: "Suas alterações foram salvas no banco." });
                          // Recarrega o profile para refletir o novo nome/avatar
                          await reloadProfile();
-                       } else {
-                         // Fallback: atualiza store local quando Supabase não está configurado (somente nome)
-                         updateUser(session.id, { name: formData.name });
-                         toast({ title: "Perfil atualizado", description: "Alterações salvas localmente." });
                        }
                        setEditing(false);
                      } catch (err: any) {
                        toast({ title: "Falha ao salvar perfil", description: err?.message ?? "Erro inesperado" });
                      }
-                   }}
+                  }}
                   className="gap-2"
                 >
                   <Save className="w-4 h-4" />
@@ -275,7 +261,6 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
                     try {
                       setAvatarPreview(null);
                       setAvatarFile(null);
-                      setMyAvatar("");
                       if (isSupabaseEnabled && supabase) {
                         // Carrega avatar atual para remover do Storage, se existir
                         const { data, error } = await supabase
@@ -332,7 +317,7 @@ export function ProfileView({ session, tickets }: ProfileViewProps) {
                 <div>
                   <p className="text-xs text-muted-foreground">Função</p>
                   <p className="text-sm font-medium text-foreground">
-                    {session.role === "master" ? "Master" : "Usuário"}
+                    {roleLabel}
                   </p>
                 </div>
               </div>

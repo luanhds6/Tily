@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase, isSupabaseEnabled } from "@/lib/supabase";
 
-const LS_TICKETS = "sc_tickets_v2";
-
 export interface Message {
   id: string;
   authorId: string;
@@ -39,37 +37,22 @@ function uid(prefix = "id") {
   return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function loadJSON(key: string, fallback: any) {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch (e) {
-    return fallback;
-  }
-}
-
-function saveJSON(key: string, data: any) {
-  localStorage.setItem(key, JSON.stringify(data));
-}
+// Removido armazenamento local: tickets são gerenciados apenas via Supabase
 
 export function useTickets() {
-  const [tickets, setTickets] = useState<Ticket[]>(() => loadJSON(LS_TICKETS, []));
+  const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loadedFromSupabase, setLoadedFromSupabase] = useState(false);
-  const [supabaseUnavailable, setSupabaseUnavailable] = useState(false);
 
-  // Carrega tickets do Supabase (se configurado)
+  // Carrega tickets do Supabase (fonte única)
   useEffect(() => {
     const loadFromSupabase = async () => {
-      if (!isSupabaseEnabled || !supabase || supabaseUnavailable) return;
+      if (!isSupabaseEnabled || !supabase) return;
       const { data: ticketRows, error: tErr } = await supabase
         .from("tickets")
         .select("*")
         .order("created_at", { ascending: false });
       if (tErr) {
-        console.warn("Supabase indisponível para tickets, usando armazenamento local.", tErr);
-        if (tErr.code === "PGRST205" || (tErr as any).status === 404) {
-          setSupabaseUnavailable(true);
-        }
+        console.warn("Falha ao carregar tickets do Supabase:", tErr);
         return;
       }
 
@@ -118,12 +101,11 @@ export function useTickets() {
 
       setTickets(mapped);
       setLoadedFromSupabase(true);
-      // Cache local para carregamentos rápidos
-      saveJSON(LS_TICKETS, mapped);
+      // Sem cache local: dados somente pelo Supabase
     };
 
     loadFromSupabase();
-  }, [supabaseUnavailable]);
+  }, []);
 
   // Assina inserções de mensagens no Supabase para manter estado sincronizado
   useEffect(() => {
@@ -167,12 +149,7 @@ export function useTickets() {
     };
   }, [loadedFromSupabase]);
 
-  // Mantém cache local quando não estiver usando Supabase
-  useEffect(() => {
-    if (!isSupabaseEnabled) {
-      saveJSON(LS_TICKETS, tickets);
-    }
-  }, [tickets]);
+  // Sem cache local
 
   const createTicket = (userId: string, userName: string, data: Partial<Ticket>) => {
     const slaMap: Record<string, number> = {

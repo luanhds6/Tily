@@ -4,29 +4,22 @@ import ProfilesManagementView from "@/components/users/ProfilesManagementView";
 import { ProfileView } from "@/components/profile/ProfileView";
 import { SettingsView } from "@/components/settings/SettingsView";
 import AccessCategoriesView from "@/components/settings/AccessCategoriesView";
-import { Session, User } from "@/hooks/useAuth";
+import { Session } from "@/hooks/useAuth";
 import { Ticket } from "@/hooks/useTickets";
+import { useAccessControl } from "@/hooks/useAccessControl";
 
 interface AdminSettingsPageProps {
   session: Session;
-  users: User[];
   tickets: Ticket[];
-  onCreateUser: (data: { name: string; email: string; password: string; role: "user" | "master" }) => void;
-  onUpdateUser: (id: string, updates: Partial<User>) => void;
-  onDeleteUser: (id: string) => void;
 }
 
 export default function AdminSettingsPage({
   session,
-  users,
   tickets,
-  onCreateUser,
-  onUpdateUser,
-  onDeleteUser,
 }: AdminSettingsPageProps) {
-  const isMaster = session.role === "master";
-  const currentUser = users.find((u) => u.id === session.id);
-  const defaultTab = isMaster ? (currentUser ? "users" : "profile") : "profile";
+  const access = useAccessControl(session);
+  const isMaster = access?.perms?.role === "master";
+  const defaultTab = isMaster ? "users" : "profile";
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">

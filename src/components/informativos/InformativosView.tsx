@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Session } from "@/hooks/useAuth";
+import { useAccessControl } from "@/hooks/useAccessControl";
 import { useInformativos, InformativoType } from "@/hooks/useInformativos";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { AlertCircle, Info, Wrench } from "lucide-react";
 
 export function InformativosView({ session }: { session: Session }) {
-const isAdmin = session.role === "master";
+  const access = useAccessControl(session);
+  const isAdmin = !!access?.perms && access.perms.role === "master";
   const { items, createInformativo } = useInformativos();
 
   const [title, setTitle] = useState("");

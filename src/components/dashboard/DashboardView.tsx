@@ -2,6 +2,7 @@ import React from "react";
 import { Ticket, Clock, CheckCircle, AlertTriangle, TrendingUp, Users as UsersIcon } from "lucide-react";
 import { Ticket as TicketType } from "../../hooks/useTickets";
 import { Session } from "../../hooks/useAuth";
+import { useAccessControl } from "@/hooks/useAccessControl";
 import { AgentRanking } from "./AgentRanking";
 import { User } from "../../hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -41,7 +42,8 @@ function StatCard({ icon: Icon, label, value, variant = "default", onClick }: an
 }
 
 export function DashboardView({ tickets, session, agents, onViewChange }: DashboardViewProps) {
-const isAdmin = session.role === "master";
+  const access = useAccessControl(session);
+  const isAdmin = !!access?.perms && access.perms.role === "master";
 
   // Calculate stats
   const myTickets = tickets.filter((t) => t.authorId === session.id);

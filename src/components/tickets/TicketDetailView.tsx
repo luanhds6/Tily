@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Ticket, Message } from "@/hooks/useTickets";
 import { Session, User } from "@/hooks/useAuth";
+import { useAccessControl } from "@/hooks/useAccessControl";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,8 +39,8 @@ export function TicketDetailView({
 }: TicketDetailViewProps) {
   const [replyText, setReplyText] = useState("");
   const [attachments, setAttachments] = useState<any[]>([]);
-
-const isAdmin = session.role === "master";
+  const access = useAccessControl(session);
+  const isAdmin = !!access?.perms && access.perms.role === "master";
   const canEdit = isAdmin || session.id === ticket.authorId;
   const isOwner = session.id === ticket.authorId;
   const isResolved = ticket.status === "Resolvido";

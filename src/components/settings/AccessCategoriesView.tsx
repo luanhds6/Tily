@@ -41,12 +41,12 @@ export default function AccessCategoriesView() {
   async function loadPermissions(categoryId: string) {
     const { data, error } = await supabase
       .from("access_category_permissions")
-      .select("permission_key, allowed")
+      .select("resource_key, allow")
       .eq("category_id", categoryId);
     if (!error) {
       const map: Record<string, boolean> = {};
-      for (const { permission_key, allowed } of data || []) {
-        map[permission_key] = !!allowed;
+      for (const { resource_key, allow } of (data || []) as Array<{ resource_key: string; allow: boolean }>) {
+        map[resource_key] = !!allow;
       }
       setPerms(map);
     }
@@ -85,8 +85,8 @@ export default function AccessCategoriesView() {
 
   async function savePermissions() {
     if (!selectedId) return;
-    const rows = RESOURCE_KEYS.map(({ key }) => ({ category_id: selectedId, permission_key: key, allowed: !!perms[key] }));
-    const { error } = await supabase.from("access_category_permissions").upsert(rows, { onConflict: "category_id,permission_key" });
+    const rows = RESOURCE_KEYS.map(({ key }) => ({ category_id: selectedId, resource_key: key, allow: !!perms[key] }));
+    const { error } = await supabase.from("access_category_permissions").upsert(rows, { onConflict: "category_id,resource_key" });
     if (error) {
       setError(error.message);
     }
